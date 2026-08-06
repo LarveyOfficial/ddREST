@@ -8,6 +8,7 @@
  * than internals that had to be derived from somewhere else.
  *
  * Run:  bun run list-tools
+ *       bun run list-tools doordash_find_restaurants   (dump one tool's schema)
  *
  * Performs a real login and consumes one authorization code. Prints only tool
  * metadata — no account data is fetched.
@@ -24,6 +25,19 @@ const cfg = loadConfig({
   SESSION_KEYS: process.env.SESSION_KEYS || Buffer.alloc(32, 1).toString('base64'),
 })
 
+/**
+ * Arguments are identified by shape rather than position, because both are
+ * optional and either can come first:
+ *
+ *   bun run list-tools
+ *   bun run list-tools doordash_find_restaurants
+ *   bun run list-tools 'http://localhost:4180/oauth2/callback?code=…&state=…'
+ *   bun run list-tools doordash_find_restaurants 'http://localhost:4180/…'
+ */
+const args = process.argv.slice(2)
+const toolFilter = args.find((a) => /^(doordash|internal)_/.test(a))
+const pastedCallback = args.find((a) => a.includes('://') || a.includes('code='))
+
 const accessToken = process.env.DD_ACCESS_TOKEN ?? (await loginForToken())
 
 /** Paste-back login, skipped entirely when DD_ACCESS_TOKEN is already set. */
@@ -37,7 +51,7 @@ async function loginForToken(): Promise<string> {
   console.log('3. Paste the full URL from the address bar.\n')
   console.log('   (Or skip all this by setting DD_ACCESS_TOKEN to a token you already have.)\n')
 
-  const pasted = process.argv[2] ?? prompt('Callback URL:')
+  const pasted = pastedCallback ?? prompt('Callback URL:')
   if (!pasted) {
     console.error('Nothing pasted; aborting. Pass the URL as an argument, or set DD_ACCESS_TOKEN.')
     process.exit(1)
@@ -111,14 +125,13 @@ for (const tool of advertised) advertisedNames.add(tool.name ?? '(unnamed)')
  * required?" — our own route schemas were reconstructed from dd-cli's
  * behaviour, which is what the CLI sends, not what the gateway demands.
  */
-const filter = process.argv.find((a) => a.startsWith('doordash_') || a.startsWith('internal_'))
-if (filter) {
-  const tool = advertised.find((t) => t.name === filter)
+if (toolFilter) {
+  const tool = advertised.find((t) => t.name === toolFilter)
   if (!tool) {
-    console.error(`\nThe gateway does not advertise a tool named ${filter}.`)
+    console.error(`\nThe gateway does not advertise a tool named ${toolFilter}.`)
     process.exit(1)
   }
-  console.log(`\n--- ${filter} ---\n`)
+  console.log(`\n--- ${toolFilter} ---\n`)
   if (tool.description) console.log(`${tool.description}\n`)
 
   const schema = tool.inputSchema as { required?: string[]; properties?: Record<string, unknown> } | undefined
