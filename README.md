@@ -485,11 +485,26 @@ That costs one extra upstream lookup, so passing `latitude`/`longitude`
 directly stays the cheaper path. Nothing is cached — an address you just added
 would otherwise be invisible until a TTL elapsed.
 
+The id is the `address_id` field, not `address_link_id`.
+
 Sending `address_id` *and* coordinates is refused rather than picking a winner,
 since the two can disagree and you would have no way to tell which was used. An
-unknown id returns `address_not_found` and lists the ids that do exist; a saved
-address with no coordinates on it returns `address_missing_coordinates` rather
-than quietly falling back to the configured default.
+unknown id returns `address_not_found` listing the addresses that do exist —
+ids are opaque numbers, so each comes with its printable address:
+
+```json
+{
+  "error": "address_not_found",
+  "message": "No saved address has the id \"9999\".",
+  "addresses": "/v1/addresses",
+  "known_addresses": [
+    { "id": "1611178960", "address": "Thompson Hotels, 21 E Bellevue Pl, Chicago, IL 60611, USA" }
+  ]
+}
+```
+
+A saved address carrying no coordinates returns `address_missing_coordinates`
+rather than quietly falling back to the configured default.
 
 The auth and pairing routes are not tool-backed:
 

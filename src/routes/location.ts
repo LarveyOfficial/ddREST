@@ -63,10 +63,12 @@ export async function resolveLocation(c: Context<AppEnv>, input: LocationInput):
   const address = findAddress(result, address_id)
 
   if (!address) {
-    const known = collectIds(result)
+    // Ids are opaque numbers, so listing them bare is little help — pair each
+    // with something a human recognises.
+    const known = collectAddresses(result)
     throw new ApiError(400, 'address_not_found', `No saved address has the id ${JSON.stringify(address_id)}.`, {
       addresses: '/v1/addresses',
-      ...(known.length > 0 ? { known_address_ids: known } : {}),
+      ...(known.length > 0 ? { known_addresses: known } : {}),
     })
   }
 
@@ -112,16 +114,21 @@ function findAddress(result: unknown, addressId: string): Record<string, unknown
   return undefined
 }
 
-/** Ids present in the payload, so a wrong one can be corrected without a second call. */
-function collectIds(result: unknown): string[] {
-  const ids = new Set<string>()
+const LABEL_FIELDS = ['printable_address', 'street_address', 'label', 'name', 'address']
+
+/** The usable addresses in the payload, so a wrong id can be corrected without a second call. */
+function collectAddresses(result: unknown): { id: string; address?: string }[] {
+  const found = new Map<string, { id: string; address?: string }>()
   for (const obj of walkObjects(result)) {
-    // Only objects that also look like addresses; ids on unrelated nested
-    // objects would be noise in the error.
+    // Only objects that also carry coordinates; ids on unrelated nested objects
+    // would be noise in the error.
     const id = idOf(obj)
-    if (id !== undefined && coordinatesOf(obj)) ids.add(id)
+    if (id === undefined || found.has(id) || !coordinatesOf(obj)) continue
+
+    const label = LABEL_FIELDS.map((f) => obj[f]).find((v) => typeof v === 'string' && v.trim() !== '')
+    found.set(id, { id, ...(typeof label === 'string' ? { address: label } : {}) })
   }
-  return [...ids]
+  return [...found.values()]
 }
 
 function pickNumber(obj: Record<string, unknown>, fields: string[]): number | undefined {

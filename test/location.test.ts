@@ -20,12 +20,40 @@ function withAddresses(addresses: unknown): void {
   })
 }
 
-const HOME = { id: 'addr-home', street: '1 Main St', lat: 40.7128, lng: -74.006 }
-const WORK = { id: 'addr-work', street: '2 Broad St', lat: 34.0522, lng: -118.2437 }
+/** The real shape, captured from a live account. */
+const CHICAGO = {
+  address_id: '1611178960',
+  address_link_id: '6065321966',
+  printable_address: 'Thompson Hotels, 21 E Bellevue Pl, Chicago, IL 60611, USA',
+  street_address: '21 E Bellevue Pl',
+  city: 'Chicago',
+  state: 'IL',
+  zip_code: '60611',
+  lat: 41.901498986408114,
+  lng: -87.62748101726174,
+  is_default: false,
+  label: null,
+  delivery_instructions: '',
+}
+
+const LA = {
+  ...CHICAGO,
+  address_id: '2222222222',
+  address_link_id: '3333333333',
+  printable_address: '2 Broad St, Los Angeles, CA 90012, USA',
+  street_address: '2 Broad St',
+  city: 'Los Angeles',
+  state: 'CA',
+  lat: 34.0522,
+  lng: -118.2437,
+  is_default: true,
+}
+
+const LIST = { widget_type: 'delivery_addresses', addresses: [CHICAGO, LA] }
 
 beforeEach(async () => {
   if (!session) session = (await login(h)).sessionToken
-  withAddresses({ addresses: [HOME, WORK] })
+  withAddresses(LIST)
 })
 
 const get = (path: string) => h.request(path, { headers: bearer(session) })
@@ -34,17 +62,24 @@ const searchArgs = () => calls.find((c) => c.tool === TOOLS.findRestaurants)?.ar
 
 describe('address_id as a location', () => {
   test('resolves to the saved address coordinates', async () => {
-    const res = await get('/v1/restaurants?query=pizza&address_id=addr-work')
+    const res = await get(`/v1/restaurants?query=pizza&address_id=${LA.address_id}`)
     expect(res.status).toBe(200)
 
     expect(calls.map((c) => c.tool)).toEqual([TOOLS.listDeliveryAddresses, TOOLS.findRestaurants])
-    expect(searchArgs()).toMatchObject({ latitude: 34.0522, longitude: -118.2437 })
+    expect(searchArgs()).toMatchObject({ latitude: LA.lat, longitude: LA.lng })
   })
 
   test('works the same on nearby-stores', async () => {
-    await get('/v1/nearby-stores?address_id=addr-home')
+    await get(`/v1/nearby-stores?address_id=${CHICAGO.address_id}`)
     const args = calls.find((c) => c.tool === TOOLS.findNearbyStores)?.args
-    expect(args).toMatchObject({ user_lat: 40.7128, user_lon: -74.006 })
+    expect(args).toMatchObject({ user_lat: CHICAGO.lat, user_lon: CHICAGO.lng })
+  })
+
+  test('address_link_id is not mistaken for address_id', async () => {
+    // Each entry carries both, and only one of them is the id this accepts.
+    const res = await get(`/v1/restaurants?query=pizza&address_id=${CHICAGO.address_link_id}`)
+    expect(res.status).toBe(400)
+    expect(((await res.json()) as { error: string }).error).toBe('address_not_found')
   })
 
   test('costs no extra lookup when coordinates are given directly', async () => {
@@ -59,14 +94,22 @@ describe('address_id as a location', () => {
     expect(searchArgs()).toMatchObject({ latitude: h.cfg.defaultLatitude, longitude: h.cfg.defaultLongitude })
   })
 
-  test('an unknown id is rejected, and says which ids exist', async () => {
-    const res = await get('/v1/restaurants?query=pizza&address_id=addr-nope')
+  test('an unknown id is rejected, and says which addresses exist', async () => {
+    const res = await get('/v1/restaurants?query=pizza&address_id=9999')
     expect(res.status).toBe(400)
 
-    const body = (await res.json()) as { error: string; message: string; known_address_ids: string[] }
+    const body = (await res.json()) as {
+      error: string
+      message: string
+      known_addresses: { id: string; address?: string }[]
+    }
     expect(body.error).toBe('address_not_found')
-    expect(body.message).toContain('addr-nope')
-    expect(body.known_address_ids).toEqual(['addr-home', 'addr-work'])
+    expect(body.message).toContain('9999')
+    // Ids alone are opaque numbers, so each is paired with something readable.
+    expect(body.known_addresses).toEqual([
+      { id: CHICAGO.address_id, address: CHICAGO.printable_address },
+      { id: LA.address_id, address: LA.printable_address },
+    ])
 
     // Rejected before the search runs, rather than quietly searching elsewhere.
     expect(calls.map((c) => c.tool)).toEqual([TOOLS.listDeliveryAddresses])
