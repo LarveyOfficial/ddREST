@@ -100,18 +100,51 @@ if (advertised.length === 0) {
   process.exit(0)
 }
 
-console.log(`\n--- the gateway advertises ${advertised.length} tools ---\n`)
 const implemented = new Set<string>(Object.values(TOOLS))
 const advertisedNames = new Set<string>()
+for (const tool of advertised) advertisedNames.add(tool.name ?? '(unnamed)')
+
+/**
+ * A tool name filter dumps that tool's advertised input schema in full.
+ *
+ * This is the only authoritative answer to "is this argument actually
+ * required?" — our own route schemas were reconstructed from dd-cli's
+ * behaviour, which is what the CLI sends, not what the gateway demands.
+ */
+const filter = process.argv.find((a) => a.startsWith('doordash_') || a.startsWith('internal_'))
+if (filter) {
+  const tool = advertised.find((t) => t.name === filter)
+  if (!tool) {
+    console.error(`\nThe gateway does not advertise a tool named ${filter}.`)
+    process.exit(1)
+  }
+  console.log(`\n--- ${filter} ---\n`)
+  if (tool.description) console.log(`${tool.description}\n`)
+
+  const schema = tool.inputSchema as { required?: string[]; properties?: Record<string, unknown> } | undefined
+  if (!schema) {
+    console.log('The gateway advertises no input schema for this tool.')
+  } else {
+    const required = new Set(schema.required ?? [])
+    for (const arg of Object.keys(schema.properties ?? {})) {
+      console.log(`  ${required.has(arg) ? 'REQUIRED' : 'optional'}  ${arg}`)
+    }
+    console.log(`\nFull schema:\n${JSON.stringify(schema, null, 2)}`)
+  }
+  process.exit(0)
+}
+
+console.log(`\n--- the gateway advertises ${advertised.length} tools ---\n`)
 
 for (const tool of advertised) {
   const name = tool.name ?? '(unnamed)'
-  advertisedNames.add(name)
   const mark = implemented.has(name) ? ' ' : '+' // '+' = advertised but not implemented here
   const schema = tool.inputSchema ? 'schema' : 'no schema'
   console.log(`  ${mark} ${name.padEnd(42)} ${schema}`)
   if (tool.description) console.log(`      ${tool.description.slice(0, 100)}`)
 }
+console.log('\n  Pass a tool name to dump its full input schema, e.g.:')
+console.log('    bun run list-tools doordash_find_restaurants')
 
 const missing = [...implemented].filter((t) => !advertisedNames.has(t))
 const extra = [...advertisedNames].filter((t) => !implemented.has(t))
