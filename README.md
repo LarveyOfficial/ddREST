@@ -84,7 +84,7 @@ with TLS and leave it alone. Bearer tokens work either way.
 
 ## Unraid
 
-[`unraid/ddREST.xml`](unraid/ddREST.xml) is a Community-Applications-style
+[`unraid/my-ddREST.xml`](unraid/my-ddREST.xml) is a Community-Applications-style
 template. Copy it to `/boot/config/plugins/dockerMan/templates-user/` on your
 server, then *Docker → Add Container* and pick **ddREST** from the template
 dropdown.
