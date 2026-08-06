@@ -485,6 +485,14 @@ That costs one extra upstream lookup, so passing `latitude`/`longitude`
 directly stays the cheaper path. Nothing is cached — an address you just added
 would otherwise be invisible until a TTL elapsed.
 
+Pass `address_id=default` for whichever address DoorDash marks as the account
+default, so the common case needs no lookup at all:
+
+```bash
+curl -s "http://localhost:8787/v1/restaurants?query=pizza&address_id=default" \
+  -H "authorization: Bearer dds2.…"
+```
+
 The id is the `address_id` field, not `address_link_id`.
 
 Sending `address_id` *and* coordinates is refused rather than picking a winner,
