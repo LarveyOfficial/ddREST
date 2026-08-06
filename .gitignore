@@ -1,0 +1,11 @@
+node_modules/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+openapi/__pycache__/
+openapi/swagger-ui-assets/
+.idea/
+
+data/
