@@ -24,6 +24,10 @@ import { TOOLS } from '../mcp/tools.ts'
 import { callTool } from './shared.ts'
 
 const ID_FIELDS = ['id', 'address_id', 'uuid', 'address_uuid']
+const DEFAULT_FIELDS = ['is_default', 'default', 'is_primary']
+
+/** Stands in for whichever address DoorDash has marked as the default. */
+export const DEFAULT_KEYWORD = 'default'
 const LAT_FIELDS = ['lat', 'latitude']
 const LNG_FIELDS = ['lng', 'lon', 'long', 'longitude']
 
@@ -60,16 +64,33 @@ export async function resolveLocation(c: Context<AppEnv>, input: LocationInput):
   }
 
   const result = await callTool(c, TOOLS.listDeliveryAddresses, {})
-  const address = findAddress(result, address_id)
+
+  // A literal id match is tried first, so a real address whose id happened to
+  // be "default" would still win over the keyword.
+  let address = findAddress(result, address_id)
+  if (!address && address_id.toLowerCase() === DEFAULT_KEYWORD) {
+    address = findDefaultAddress(result)
+    if (!address) {
+      throw new ApiError(
+        400,
+        'address_not_found',
+        'No saved address is marked as the default. Pass a specific address_id instead.',
+        { addresses: '/v1/addresses', known_addresses: collectAddresses(result) },
+      )
+    }
+  }
 
   if (!address) {
     // Ids are opaque numbers, so listing them bare is little help — pair each
     // with something a human recognises.
     const known = collectAddresses(result)
-    throw new ApiError(400, 'address_not_found', `No saved address has the id ${JSON.stringify(address_id)}.`, {
-      addresses: '/v1/addresses',
-      ...(known.length > 0 ? { known_addresses: known } : {}),
-    })
+    throw new ApiError(
+      400,
+      'address_not_found',
+      `No saved address has the id ${JSON.stringify(address_id)}. ` +
+        `Use one of the ids below, or "${DEFAULT_KEYWORD}" for whichever address is marked as the default.`,
+      { addresses: '/v1/addresses', ...(known.length > 0 ? { known_addresses: known } : {}) },
+    )
   }
 
   const coords = coordinatesOf(address)
@@ -114,11 +135,20 @@ function findAddress(result: unknown, addressId: string): Record<string, unknown
   return undefined
 }
 
+/** The entry flagged as the account's default, if any is. */
+function findDefaultAddress(result: unknown): Record<string, unknown> | undefined {
+  for (const obj of walkObjects(result)) {
+    if (idOf(obj) === undefined || !coordinatesOf(obj)) continue
+    if (DEFAULT_FIELDS.some((field) => obj[field] === true)) return obj
+  }
+  return undefined
+}
+
 const LABEL_FIELDS = ['printable_address', 'street_address', 'label', 'name', 'address']
 
 /** The usable addresses in the payload, so a wrong id can be corrected without a second call. */
-function collectAddresses(result: unknown): { id: string; address?: string }[] {
-  const found = new Map<string, { id: string; address?: string }>()
+function collectAddresses(result: unknown): { id: string; address?: string; default?: true }[] {
+  const found = new Map<string, { id: string; address?: string; default?: true }>()
   for (const obj of walkObjects(result)) {
     // Only objects that also carry coordinates; ids on unrelated nested objects
     // would be noise in the error.
@@ -126,7 +156,11 @@ function collectAddresses(result: unknown): { id: string; address?: string }[] {
     if (id === undefined || found.has(id) || !coordinatesOf(obj)) continue
 
     const label = LABEL_FIELDS.map((f) => obj[f]).find((v) => typeof v === 'string' && v.trim() !== '')
-    found.set(id, { id, ...(typeof label === 'string' ? { address: label } : {}) })
+    found.set(id, {
+      id,
+      ...(typeof label === 'string' ? { address: label } : {}),
+      ...(DEFAULT_FIELDS.some((field) => obj[field] === true) ? { default: true as const } : {}),
+    })
   }
   return [...found.values()]
 }

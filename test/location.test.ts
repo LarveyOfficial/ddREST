@@ -75,6 +75,26 @@ describe('address_id as a location', () => {
     expect(args).toMatchObject({ user_lat: CHICAGO.lat, user_lon: CHICAGO.lng })
   })
 
+  test('"default" resolves to whichever address is flagged as the default', async () => {
+    await get('/v1/restaurants?query=pizza&address_id=default')
+    expect(searchArgs()).toMatchObject({ latitude: LA.lat, longitude: LA.lng })
+  })
+
+  test('a literal id beats the "default" keyword, so a real id can never be shadowed', async () => {
+    withAddresses({ addresses: [{ ...CHICAGO, address_id: 'default' }, LA] })
+
+    await get('/v1/restaurants?query=pizza&address_id=default')
+    expect(searchArgs()).toMatchObject({ latitude: CHICAGO.lat, longitude: CHICAGO.lng })
+  })
+
+  test('"default" with nothing marked default is a clear error', async () => {
+    withAddresses({ addresses: [CHICAGO] }) // is_default: false
+
+    const res = await get('/v1/restaurants?query=pizza&address_id=default')
+    expect(res.status).toBe(400)
+    expect(((await res.json()) as { message: string }).message).toContain('marked as the default')
+  })
+
   test('address_link_id is not mistaken for address_id', async () => {
     // Each entry carries both, and only one of them is the id this accepts.
     const res = await get(`/v1/restaurants?query=pizza&address_id=${CHICAGO.address_link_id}`)
@@ -101,14 +121,15 @@ describe('address_id as a location', () => {
     const body = (await res.json()) as {
       error: string
       message: string
-      known_addresses: { id: string; address?: string }[]
+      known_addresses: { id: string; address?: string; default?: true }[]
     }
     expect(body.error).toBe('address_not_found')
     expect(body.message).toContain('9999')
-    // Ids alone are opaque numbers, so each is paired with something readable.
+    // Ids alone are opaque numbers, so each is paired with something readable,
+    // and the default is flagged since that is the one most callers want.
     expect(body.known_addresses).toEqual([
       { id: CHICAGO.address_id, address: CHICAGO.printable_address },
-      { id: LA.address_id, address: LA.printable_address },
+      { id: LA.address_id, address: LA.printable_address, default: true },
     ])
 
     // Rejected before the search runs, rather than quietly searching elsewhere.

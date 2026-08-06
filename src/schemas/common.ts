@@ -56,7 +56,8 @@ export const LongitudeQuery = z.coerce.number().min(-180).max(180)
 /** Alternative to latitude/longitude on any endpoint that takes a location. */
 export const AddressIdQuery = z.string().min(1).meta({
   description:
-    'An id from GET /v1/addresses, used instead of latitude/longitude — the coordinates are looked up from the ' +
-    'saved address. Cannot be combined with latitude/longitude.',
-  example: 'addr_123',
+    'An `address_id` from GET /v1/addresses, used instead of latitude/longitude — the coordinates are looked up ' +
+    'from the saved address. Pass `default` for whichever address is marked as the account default. Cannot be ' +
+    'combined with latitude/longitude.',
+  example: 'default',
 })
