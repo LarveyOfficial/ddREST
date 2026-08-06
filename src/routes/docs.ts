@@ -42,6 +42,10 @@ const page = /* html */ `<!doctype html>
       then paste the <code>http://localhost:4180/…</code> URL it lands on (the page will fail to load — that is
       expected) into <code>POST /v1/auth/login/complete</code>. That sets the session cookie, after which
       <em>Try it out</em> works on every endpoint below.
+      <br /><br />
+      <strong>Signing in something without a browser?</strong> A device can call
+      <code>POST /v1/auth/pair/request</code>, display the short code it gets back, and poll
+      <code>POST /v1/auth/pair/token</code> while you approve it at <a href="/v1/auth/pair">/v1/auth/pair</a>.
     </div>
     <div id="swagger-ui"></div>
     <script src="${CDN}/swagger-ui-bundle.js" crossorigin></script>

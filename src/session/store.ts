@@ -22,13 +22,12 @@
  */
 
 import { Database } from 'bun:sqlite'
-import { randomBytes } from 'node:crypto'
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
-import { decryptBlob, encryptBlob, KEY_LENGTH } from '../crypto/aead.ts'
+import { decryptBlob, encryptBlob } from '../crypto/aead.ts'
+import { createHandle, parseHandle } from '../crypto/handle.ts'
 
 export const SESSION_PREFIX = 'dds2'
-const ID_LENGTH = 16
 const AAD = 'dd.session.v2'
 
 /** The secret half of a session, encrypted at rest under the client's key. */
@@ -94,8 +93,7 @@ export class SessionStore {
     credential: string
     id: string
   } {
-    const id = randomBytes(ID_LENGTH).toString('hex')
-    const key = randomBytes(KEY_LENGTH)
+    const { id, key, credential } = createHandle(SESSION_PREFIX)
     const timestamp = now()
 
     this.#db
@@ -105,7 +103,6 @@ export class SessionStore {
       )
       .run(id, seal(key, fields), accessExpiresAt, absoluteExpiresAt, timestamp, timestamp)
 
-    const credential = `${SESSION_PREFIX}.${Buffer.concat([Buffer.from(id, 'hex'), key]).toString('base64url')}`
     return { credential, id }
   }
 
@@ -180,18 +177,5 @@ function open(key: Buffer, payload: Uint8Array): SealedFields | undefined {
 }
 
 export function parseCredential(credential: string): { id: string; key: Buffer } | undefined {
-  if (typeof credential !== 'string' || !credential.startsWith(`${SESSION_PREFIX}.`)) return undefined
-
-  let raw: Buffer
-  try {
-    raw = Buffer.from(credential.slice(SESSION_PREFIX.length + 1), 'base64url')
-  } catch {
-    return undefined
-  }
-  if (raw.length !== ID_LENGTH + KEY_LENGTH) return undefined
-
-  return {
-    id: raw.subarray(0, ID_LENGTH).toString('hex'),
-    key: raw.subarray(ID_LENGTH),
-  }
+  return parseHandle(SESSION_PREFIX, credential)
 }

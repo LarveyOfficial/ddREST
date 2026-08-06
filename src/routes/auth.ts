@@ -70,7 +70,7 @@ const LoginCompleteRequest = z
   })
   .openapi('LoginCompleteRequest')
 
-const SessionResponse = z
+export const SessionResponse = z
   .object({
     session_token: z.string().meta({
       description:

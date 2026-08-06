@@ -8,8 +8,10 @@ import { createAuthSealers } from './auth/tokens.ts'
 import { sessionMiddleware } from './auth/middleware.ts'
 import { SESSION_PREFIX } from './session/store.ts'
 import { SessionManager } from './session/manager.ts'
+import { PairingManager } from './pairing/manager.ts'
 import type { AppEnv } from './types.ts'
 import { registerAuthRoutes } from './routes/auth.ts'
+import { registerPairingRoutes } from './routes/pair.ts'
 import { registerDocsRoutes } from './routes/docs.ts'
 import { registerDiscoveryRoutes } from './routes/discovery.ts'
 import { registerCartRoutes } from './routes/carts.ts'
@@ -22,6 +24,8 @@ export function createApp(cfg: Config): OpenAPIHono<AppEnv> {
   const mcp = new McpClient(cfg)
   const sessions = new SessionManager(cfg)
   sessions.startSweeper()
+  const pairings = new PairingManager(cfg, sealers)
+  if (cfg.pairingEnabled) pairings.startSweeper()
 
   const app = new OpenAPIHono<AppEnv>({
     // Surface Zod failures in the same error envelope as everything else.
@@ -43,6 +47,7 @@ export function createApp(cfg: Config): OpenAPIHono<AppEnv> {
     c.set('config', cfg)
     c.set('sealers', sealers)
     c.set('sessions', sessions)
+    c.set('pairings', pairings)
     c.set('mcp', mcp)
     await next()
   })
@@ -64,6 +69,7 @@ export function createApp(cfg: Config): OpenAPIHono<AppEnv> {
 
   registerDocsRoutes(app)
   registerAuthRoutes(app)
+  registerPairingRoutes(app)
 
   // Everything below the auth routes needs a session. Registered as route-level
   // middleware rather than a blanket app.use so the OpenAPI document reflects it.
@@ -116,6 +122,12 @@ export function createApp(cfg: Config): OpenAPIHono<AppEnv> {
     },
     tags: [
       { name: 'Auth', description: 'Paste-back OAuth login and session inspection.' },
+      {
+        name: 'Pairing',
+        description:
+          'RFC 8628-style device pairing, for provisioning a session to something with no browser. Additive — ' +
+          'the Auth endpoints above are unchanged and remain the normal way in.',
+      },
       { name: 'Discovery', description: 'Restaurants, stores, menus and items.' },
       { name: 'Grocery', description: 'Grocery product lists.' },
       { name: 'Cart', description: 'Cart lifecycle.' },

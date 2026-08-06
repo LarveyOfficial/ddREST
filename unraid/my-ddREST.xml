@@ -26,6 +26,9 @@ SETUP
 
 Sessions renew themselves after that; you will not need to log in again until the session's hard expiry.
 
+PAIRING A DEVICE WITH NO BROWSER
+For a TV, a Pi or anything awkward to paste URLs into, the device can call POST /v1/auth/pair/request, show the short code it gets back, and poll POST /v1/auth/pair/token. You approve it from a real computer at http://tower:8787/v1/auth/pair and the session is delivered to the device. Only ever approve a code you can read off a device in front of you - if someone sends you one, deny it. Set PAIRING_ENABLED to false to turn the feature off.
+
 COOKIES OVER PLAIN HTTP
 Reaching this over http://tower:8787 means browsers will refuse the session cookie unless COOKIE_SECURE is false, which is the default in this template. Bearer tokens work either way. If you put it behind a reverse proxy with TLS, set COOKIE_SECURE back to true.
 
@@ -75,6 +78,18 @@ DoorDash's MCP access is waitlist-only. Without an approved account this will no
   <Config Name="SESSION_IDLE_TIMEOUT_SECONDS" Target="SESSION_IDLE_TIMEOUT_SECONDS" Default="1209600" Mode=""
           Description="Drop a session unused for this long. Must be shorter than SESSION_MAX_AGE_SECONDS or it can never fire. 1209600=14d."
           Type="Variable" Display="advanced" Required="false" Mask="false">1209600</Config>
+
+  <Config Name="PAIRING_ENABLED" Target="PAIRING_ENABLED" Default="true" Mode=""
+          Description="Device pairing at /v1/auth/pair, for signing in things with no usable browser. Set false to remove the feature entirely."
+          Type="Variable" Display="advanced" Required="false" Mask="false">true</Config>
+
+  <Config Name="PAIRING_CODE_TTL_SECONDS" Target="PAIRING_CODE_TTL_SECONDS" Default="600" Mode=""
+          Description="How long a displayed pairing code stays approvable. Must be at least 60 - it has to survive a whole browser sign-in. 600=10m."
+          Type="Variable" Display="advanced" Required="false" Mask="false">600</Config>
+
+  <Config Name="PUBLIC_BASE_URL" Target="PUBLIC_BASE_URL" Default="" Mode=""
+          Description="Set this when reaching ddREST through a reverse proxy, e.g. https://ddrest.example.com. It is the address a paired device puts on its screen for you to visit, so an internal hostname here is an address you cannot reach. Leave empty when using http://tower:8787 directly."
+          Type="Variable" Display="advanced" Required="false" Mask="false"/>
 
   <Config Name="CORS_ORIGINS" Target="CORS_ORIGINS" Default="" Mode=""
           Description="Comma-separated origins allowed to call this from a browser on another domain. Leave empty unless you are building a web UI against it."

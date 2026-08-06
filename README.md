@@ -76,6 +76,7 @@ pin it yourself — the entrypoint handles both.
 | `HOST` | `0.0.0.0` | Overridden from the `127.0.0.1` default, which would be unreachable. |
 | `SESSION_DB_PATH` | `/data/sessions.db` | Mount `/data` to keep sessions across recreates. |
 | `PUID` / `PGID` | `1000` / `1000` | Ownership of `/data`. Unraid uses `99` / `100`. |
+| `PUBLIC_BASE_URL` | *(derived)* | Set it behind a reverse proxy — [device pairing](#pairing-a-device-with-no-browser) prints this address for a human to visit. |
 
 **Cookies over plain HTTP.** `COOKIE_SECURE` defaults to `true`, so a browser
 reaching this over `http://host:8787` will silently drop the session cookie.
@@ -142,6 +143,115 @@ rather parse the URL yourself, send `{"code":…,"state":…}` instead.
 
 That is the last login you need until the session's hard expiry, 30 days later
 by default — the tokens renew themselves in between.
+
+## Pairing a device with no browser
+
+Copying a long authorize URL onto a TV, a headless Pi or a serial console — and
+a longer callback URL back off it — is the awkward part of the flow above. So
+there is a second way in, shaped like [RFC 8628][rfc8628]: the device shows a
+short code, you approve it from a computer you already trust, and the session is
+delivered to the device.
+
+This is **additive**. `/v1/auth/login/start` and `/v1/auth/login/complete` are
+unchanged and remain the normal way in.
+
+[rfc8628]: https://datatracker.ietf.org/doc/html/rfc8628
+
+> **This is not a device grant against DoorDash.** DoorDash Identity does not
+> implement RFC 8628. The grant is against ddREST, layered on the same
+> paste-back login: a human still signs in through a real browser. The device
+> never talks to DoorDash at all.
+
+**1. The device asks for a code.**
+
+```bash
+curl -sX POST http://localhost:8787/v1/auth/pair/request \
+  -H 'content-type: application/json' \
+  -d '{"device_label":"Kitchen tablet"}'
+```
+
+```json
+{
+  "device_code": "ddp1.…",
+  "user_code": "BCDF-GHJK",
+  "verification_uri": "http://localhost:8787/v1/auth/pair",
+  "verification_uri_complete": "http://localhost:8787/v1/auth/pair?user_code=BCDF-GHJK",
+  "expires_in": 600,
+  "interval": 5
+}
+```
+
+The device displays `user_code` and keeps `device_code` secret — that is what
+collects the session. `verification_uri_complete` prefills the code, so a device
+with a screen can render it as a QR code and skip the typing entirely.
+
+**2. The device polls**, no faster than `interval`:
+
+```bash
+curl -sX POST http://localhost:8787/v1/auth/pair/token \
+  -H 'content-type: application/json' \
+  -d '{"device_code":"ddp1.…"}'
+```
+
+Until someone acts, that returns HTTP 400 with an RFC 8628 error code:
+
+| `error` | Meaning |
+| --- | --- |
+| `authorization_pending` | Nobody has approved yet. Keep polling. |
+| `slow_down` | You polled too fast. The new minimum is in `interval`. |
+| `access_denied` | A human refused. Stop. |
+| `expired_token` | The code expired unapproved. Start over. |
+| `invalid_grant` | Unknown device code, or the session was already collected. Stop. |
+
+Each body carries both `error_description` (what an off-the-shelf device-flow
+client reads) and `message` (this API's house style).
+
+**3. You approve it.** Open `/v1/auth/pair` on a real computer and type the
+code. The page walks through the same sign-in-and-paste as the normal flow, then
+confirms. There is a Deny button next to Approve.
+
+The page is plain server-rendered HTML with no JavaScript and no CDN — the
+browser you walk over to may itself be a console or a TV.
+
+If you would rather script it, `/v1/auth/pair/verify`, `/v1/auth/pair/complete`
+and `/v1/auth/pair/deny` are the JSON equivalents of the three page steps.
+Note that `/v1/auth/pair/complete` does **not** return the session to you: you
+are approving access for someone else.
+
+**4. The device's next poll returns the session**, in the same shape as
+`/v1/auth/login/complete`. It is delivered exactly once — the pairing is deleted
+on collection, so a replayed device code gets `invalid_grant`. No cookie is set.
+
+### Before you expose this
+
+Device flows have one inherent weakness, and it is worth stating plainly: an
+attacker can start a pairing, then talk *you* into typing *their* code in. If
+you approve it, they get your account. Nothing server-side can fully prevent
+that, so the approval page says so in as many words and makes Deny as easy to
+reach as Approve.
+
+**Only ever approve a code you read off a device in front of you.** If a code
+arrives by message, email or phone call, deny it.
+
+The other attack — guessing a pending code — is handled by the code itself.
+They are eight characters from a 20-consonant alphabet (no vowels, so a code
+can never spell anything; no digits, so `O`/`0` and `I`/`1` cannot be confused),
+which is about 34.6 bits. Repeated wrong-but-well-formed guesses are throttled
+on top of that; malformed input is not, so fat-fingering the code will never
+lock you out.
+
+Turn the whole feature off with `PAIRING_ENABLED=false` if you do not want it.
+
+### Pairing settings
+
+| Variable | Default | Notes |
+| --- | --- | --- |
+| `PAIRING_ENABLED` | `true` | `false` makes every pairing endpoint 403 and the page unreachable. |
+| `PAIRING_CODE_TTL_SECONDS` | `600` (10m) | How long a displayed code stays approvable. Must be at least 60 — it has to survive a whole browser login. |
+| `PAIRING_POLL_INTERVAL_SECONDS` | `5` | Minimum seconds between polls. Faster earns a `slow_down`. |
+| `PAIRING_MAX_PENDING` | `100` | Ceiling on unapproved pairings, since anyone can start one. |
+| `PAIRING_DB_PATH` | next to `SESSION_DB_PATH` | e.g. `/data/sessions-pairings.db`. |
+| `PUBLIC_BASE_URL` | *(derived from the request)* | **Set this behind a reverse proxy.** It is the address a device puts on screen for a human to walk to, so an internal hostname here is an address nobody can reach. |
 
 ## How sessions work
 
@@ -264,9 +374,20 @@ dds2.<base64url( session_id[16] || data_key[32] )>
 A dump of `sessions.db` therefore decrypts to nothing on its own. Compromising a
 session still requires the client's credential, exactly as with any cookie.
 
-`SESSION_KEYS` no longer protects sessions — it now covers only the short-lived
-login ticket. It remains an ordered list: first key seals, all decrypt, so
-prepend a new key to rotate.
+`SESSION_KEYS` no longer protects sessions — it now covers only short-lived
+sealed values: the login ticket, and the two pairing tickets below. It remains
+an ordered list: first key seals, all decrypt, so prepend a new key to rotate.
+
+Pairings get the same split-key treatment where it fits and a documented
+exception where it does not. The **device code** is the same shape as a session
+credential (`ddp1.<id||key>`) and only `sha256(key)` is stored, so a dump of the
+pairings table yields no usable device code. The **session credential waiting to
+be collected** cannot work that way — the browser doing the approving has never
+seen the device code, so it has no key to encrypt to. It is sealed under
+`SESSION_KEYS` instead, for the few minutes between approval and collection,
+and the row is deleted the moment the device picks it up. Reading that table is
+therefore not enough on its own; it also takes `SESSION_KEYS`, which is the same
+boundary login tickets already rely on.
 
 **CSRF.** Cookie-authenticated writes require a trusted `Origin`. Bearer-
 authenticated requests are exempt — a cross-site page cannot set an
@@ -348,6 +469,21 @@ ships a change.
 `tip_amount_cents` is required rather than defaulted, so a tip is always
 deliberate.
 
+The auth and pairing routes are not tool-backed:
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| POST | `/v1/auth/login/start` | Begin the paste-back login |
+| POST | `/v1/auth/login/complete` | Finish it and get a session |
+| GET | `/v1/auth/session` | Inspect the current session |
+| POST | `/v1/auth/logout` | Revoke it |
+| POST | `/v1/auth/pair/request` | Device: ask for a pairing code |
+| POST | `/v1/auth/pair/token` | Device: poll for the session |
+| GET/POST | `/v1/auth/pair` | Human: the approval pages (HTML) |
+| POST | `/v1/auth/pair/verify` | Human: look up a code (JSON) |
+| POST | `/v1/auth/pair/complete` | Human: approve it (JSON) |
+| POST | `/v1/auth/pair/deny` | Human: refuse it (JSON) |
+
 ### About `intent`
 
 Every MCP tool requires an `intent` string, and per dd-cli's own help text
@@ -413,11 +549,12 @@ DD_IDENTITY_BASE=http://127.0.0.1:8788 DD_TOKEN_BASE=http://127.0.0.1:8788 DD_MC
 ```
 src/
   config.ts            env parsing and validation
-  crypto/seal.ts       AES-256-GCM sealing with key rotation
+  crypto/               AES-256-GCM primitives, sealing, split-key handles
   auth/                PKCE, token exchange, login tickets, session middleware
   session/             SQLite store and the renewal coordinator
+  pairing/             device-flow codes, store and lifecycle
   mcp/                 JSON-RPC + SSE client; tool names and intent strings
-  routes/              auth flow, the 26 tool routes, and the /docs UI
+  routes/              auth flow, pairing, the 26 tool routes, and the /docs UI
   schemas/common.ts    shared input objects
 mock/upstream.ts       stand-in for DoorDash Identity + MCP gateway
 ```

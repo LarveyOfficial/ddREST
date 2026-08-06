@@ -418,9 +418,16 @@ describe('openapi document', () => {
     const operations = Object.values(doc.paths).flatMap((methods: Record<string, unknown>) =>
       Object.keys(methods).filter((m) => ['get', 'post', 'put', 'delete'].includes(m)),
     )
-    // 26 tools + the extra add-to-cart entry point + 4 auth routes.
-    expect(operations).toHaveLength(31)
+    // 26 tools + the extra add-to-cart entry point + 4 auth routes + 5 pairing routes.
+    expect(operations).toHaveLength(36)
     expect(doc.paths['/v1/auth/login/complete']).toBeDefined()
+
+    // Pairing is additive: the original login flow must still be documented.
+    expect(doc.paths['/v1/auth/login/start']).toBeDefined()
+    expect(doc.paths['/v1/auth/pair/request']).toBeDefined()
+
+    // The HTML pages are intentionally absent — Swagger UI would try to "execute" them.
+    expect(doc.paths['/v1/auth/pair']).toBeUndefined()
   })
 
   test('login/complete ships examples so Swagger UI does not invent "string" placeholders', async () => {

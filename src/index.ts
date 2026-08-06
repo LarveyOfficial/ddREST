@@ -57,6 +57,22 @@ console.log(`    max age  ${duration(cfg.sessionMaxAgeSeconds).padEnd(9)} (SESSI
 console.log(`    idle out ${duration(cfg.sessionIdleTimeoutSeconds).padEnd(9)} (SESSION_IDLE_TIMEOUT_SECONDS=${cfg.sessionIdleTimeoutSeconds})`)
 console.log(`    renew at ${duration(cfg.sessionRefreshSkewSeconds).padEnd(9)} before token expiry (SESSION_REFRESH_SKEW_SECONDS=${cfg.sessionRefreshSkewSeconds})`)
 console.log(`    store    ${cfg.sessionDbPath}`)
+
+if (cfg.pairingEnabled) {
+  const base = cfg.publicBaseUrl ?? `http://${server.hostname}:${server.port}`
+  console.log('  Device pairing: enabled')
+  console.log(`    pair at  ${base}/v1/auth/pair`)
+  console.log(`    codes    valid ${duration(cfg.pairingCodeTtlSeconds)}, poll every ${cfg.pairingPollIntervalSeconds}s, ${cfg.pairingMaxPending} pending max`)
+  console.log(`    store    ${cfg.pairingDbPath}`)
+  if (!cfg.publicBaseUrl) {
+    // Devices display this URL for a human to walk to, so getting it wrong is
+    // not a subtle failure — it is an address that does not resolve.
+    console.log('    (set PUBLIC_BASE_URL if this server sits behind a proxy or is reached by another name)')
+  }
+} else {
+  console.log('  Device pairing: disabled (PAIRING_ENABLED=false)')
+}
+
 if (!cfg.cookieSecure) {
   console.warn('  WARNING: COOKIE_SECURE=false — only acceptable for local http development.')
 }

@@ -50,6 +50,22 @@ export interface Config {
   sessionRefreshSkewSeconds: number
   sessionSweepIntervalSeconds: number
   sessionDbPath: string
+
+  /** RFC 8628-style pairing for devices with no browser. */
+  pairingEnabled: boolean
+  pairingDbPath: string
+  /** How long a displayed pairing code stays approvable. */
+  pairingCodeTtlSeconds: number
+  /** Seconds a device is told to wait between polls. */
+  pairingPollIntervalSeconds: number
+  /** Ceiling on unapproved pairings, since anyone can create one. */
+  pairingMaxPending: number
+  /**
+   * Externally reachable base URL, used for the verification_uri a device puts
+   * on screen. Derived from the request when unset, which is wrong behind a
+   * proxy that rewrites the host.
+   */
+  publicBaseUrl?: string
   /** Used when the token response omits both expires_in and expires_at. */
   assumedTokenTtlSeconds: number
 
@@ -153,6 +169,29 @@ function validateRedirectUri(raw: string): string {
   return url.toString()
 }
 
+/** Origin plus any path prefix, with the trailing slash removed so concatenation is predictable. */
+function normalizeBaseUrl(raw: string): string {
+  let url: URL
+  try {
+    url = new URL(raw)
+  } catch {
+    throw new ConfigError(`PUBLIC_BASE_URL is not a valid URL: ${JSON.stringify(raw)}`)
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new ConfigError(`PUBLIC_BASE_URL must be http or https, got ${JSON.stringify(url.protocol)}`)
+  }
+  return `${url.origin}${url.pathname}`.replace(/\/$/, '')
+}
+
+/**
+ * Pairings are separate rows with a separate lifetime, so they get their own
+ * file next to the session database rather than sharing its connection.
+ */
+function defaultPairingDbPath(sessionDbPath: string): string {
+  if (sessionDbPath === ':memory:') return ':memory:'
+  return sessionDbPath.replace(/(\.db)?$/, '') + '-pairings.db'
+}
+
 function normalizeOrigin(raw: string): string {
   try {
     return new URL(raw).origin
@@ -195,6 +234,32 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     }
   }
 
+  const sessionDbPath = str(env, 'SESSION_DB_PATH', './data/sessions.db')
+
+  const publicBaseUrlRaw = env.PUBLIC_BASE_URL?.trim()
+  const publicBaseUrl = publicBaseUrlRaw ? normalizeBaseUrl(publicBaseUrlRaw) : undefined
+
+  const pairingCodeTtlSeconds = int(env, 'PAIRING_CODE_TTL_SECONDS', 600)
+  const pairingPollIntervalSeconds = int(env, 'PAIRING_POLL_INTERVAL_SECONDS', 5)
+  const pairingMaxPending = int(env, 'PAIRING_MAX_PENDING', 100)
+
+  for (const [key, value] of [
+    ['PAIRING_CODE_TTL_SECONDS', pairingCodeTtlSeconds],
+    ['PAIRING_POLL_INTERVAL_SECONDS', pairingPollIntervalSeconds],
+    ['PAIRING_MAX_PENDING', pairingMaxPending],
+  ] as const) {
+    if (value <= 0) throw new ConfigError(`${key} must be greater than 0, got ${value}.`)
+  }
+
+  // A code has to survive a whole browser login, which includes the user
+  // finding their password. Anything under a minute is a code that expires
+  // mid-flow every time.
+  if (pairingCodeTtlSeconds < 60) {
+    throw new ConfigError(
+      `PAIRING_CODE_TTL_SECONDS is ${pairingCodeTtlSeconds}s, which is not long enough to sign in with. Use at least 60.`,
+    )
+  }
+
   // Not fatal, but the idle timeout can never fire in this arrangement — the
   // absolute deadline always wins first — so say so rather than let it look active.
   if (sessionIdleTimeoutSeconds >= sessionMaxAgeSeconds) {
@@ -235,7 +300,16 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     // Renew slightly early so a request never races the expiry it just checked.
     sessionRefreshSkewSeconds,
     sessionSweepIntervalSeconds: int(env, 'SESSION_SWEEP_INTERVAL_SECONDS', 3_600),
-    sessionDbPath: str(env, 'SESSION_DB_PATH', './data/sessions.db'),
+    sessionDbPath,
+
+    pairingEnabled: bool(env, 'PAIRING_ENABLED', true),
+    // Defaults alongside the session database so one mounted volume covers both.
+    pairingDbPath: str(env, 'PAIRING_DB_PATH', defaultPairingDbPath(sessionDbPath)),
+    pairingCodeTtlSeconds,
+    pairingPollIntervalSeconds,
+    pairingMaxPending,
+    publicBaseUrl,
+
     assumedTokenTtlSeconds: int(env, 'ASSUMED_TOKEN_TTL_SECONDS', 3_600),
 
     defaultLatitude: num(env, 'DEFAULT_LATITUDE', 37.3346),
