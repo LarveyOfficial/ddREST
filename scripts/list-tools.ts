@@ -9,11 +9,14 @@
  *
  * Run:  bun run list-tools
  *       bun run list-tools doordash_find_restaurants   (dump one tool's schema)
+ *       bun run list-tools --dump                      (write every schema to a file)
  *
  * Performs a real login and consumes one authorization code. Prints only tool
  * metadata — no account data is fetched.
  */
 
+import { mkdirSync, writeFileSync } from 'node:fs'
+import { dirname } from 'node:path'
 import { loadConfig } from '../src/config.ts'
 import { deriveCodeChallenge, generateCodeVerifier, generateState } from '../src/auth/pkce.ts'
 import { buildAuthorizeUrl, exchangeCodeForToken, parseCallbackUrl } from '../src/auth/oauth.ts'
@@ -37,6 +40,10 @@ const cfg = loadConfig({
 const args = process.argv.slice(2)
 const toolFilter = args.find((a) => /^(doordash|internal)_/.test(a))
 const pastedCallback = args.find((a) => a.includes('://') || a.includes('code='))
+const dump = args.includes('--dump')
+
+/** Gitignored: the dump is account-scoped output, not something to commit. */
+const DUMP_PATH = 'data/tools-list.json'
 
 const accessToken = process.env.DD_ACCESS_TOKEN ?? (await loginForToken())
 
@@ -125,6 +132,26 @@ for (const tool of advertised) advertisedNames.add(tool.name ?? '(unnamed)')
  * required?" — our own route schemas were reconstructed from dd-cli's
  * behaviour, which is what the CLI sends, not what the gateway demands.
  */
+/**
+ * One tools/list call carries every schema, so a single login is enough to
+ * audit all 26 routes against the real contract offline.
+ */
+if (dump) {
+  mkdirSync(dirname(DUMP_PATH), { recursive: true })
+  writeFileSync(DUMP_PATH, JSON.stringify(advertised, null, 2))
+
+  const required = (t: (typeof advertised)[number]) =>
+    ((t.inputSchema as { required?: string[] } | undefined)?.required ?? []).join(', ') || '(none)'
+
+  console.log(`\n--- required arguments, ${advertised.length} tools ---\n`)
+  for (const tool of advertised) {
+    const mark = implemented.has(tool.name ?? '') ? '*' : ' ' // '*' = used by this API
+    console.log(`  ${mark} ${(tool.name ?? '(unnamed)').padEnd(42)} ${required(tool)}`)
+  }
+  console.log(`\nFull schemas written to ${DUMP_PATH} (gitignored).`)
+  process.exit(0)
+}
+
 if (toolFilter) {
   const tool = advertised.find((t) => t.name === toolFilter)
   if (!tool) {
