@@ -562,6 +562,49 @@ describe('configuration', () => {
   })
 })
 
+describe('openapi examples', () => {
+  test('every pairing request body ships examples, so Swagger UI invents no "string" placeholders', async () => {
+    const doc = (await (await h.request('/openapi.json')).json()) as any
+    const bodyOf = (path: string) => doc.paths[path].post.requestBody.content['application/json']
+
+    for (const path of [
+      '/v1/auth/pair/request',
+      '/v1/auth/pair/token',
+      '/v1/auth/pair/verify',
+      '/v1/auth/pair/complete',
+      '/v1/auth/pair/deny',
+    ]) {
+      const examples = bodyOf(path).examples
+      expect(examples).toBeDefined()
+      expect(Object.keys(examples).length).toBeGreaterThan(0)
+
+      // A fabricated "string" in an example is the exact failure these exist to
+      // prevent, so no example value may contain one.
+      for (const example of Object.values(examples) as { value: Record<string, unknown> }[]) {
+        for (const value of Object.values(example.value)) expect(value).not.toBe('string')
+      }
+    }
+  })
+
+  test('the polling example omits grant_type, since prefilling it would 400 every poll', async () => {
+    const doc = (await (await h.request('/openapi.json')).json()) as any
+    const examples = doc.paths['/v1/auth/pair/token'].post.requestBody.content['application/json'].examples
+
+    // Swagger UI prefills the first example, so that one must be the plain poll.
+    expect(Object.keys(examples)).toEqual(['poll', 'rfcClient'])
+    expect(Object.keys(examples.poll.value)).toEqual(['device_code'])
+    expect(examples.rfcClient.value.grant_type).toBe('urn:ietf:params:oauth:grant-type:device_code')
+  })
+
+  test('the complete example does not suggest sending redirect_url alongside code/state', async () => {
+    const doc = (await (await h.request('/openapi.json')).json()) as any
+    const examples = doc.paths['/v1/auth/pair/complete'].post.requestBody.content['application/json'].examples
+
+    expect(Object.keys(examples.pastedUrl.value).sort()).toEqual(['approval_ticket', 'redirect_url'])
+    expect(Object.keys(examples.parsedParams.value).sort()).toEqual(['approval_ticket', 'code', 'state'])
+  })
+})
+
 describe('expiry', () => {
   test('a code that expires unapproved leaves the device with expired_token', async () => {
     // Below the configured floor, so it is set directly rather than via env.

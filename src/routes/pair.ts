@@ -241,7 +241,22 @@ export function registerPairingRoutes(app: OpenAPIHono<AppEnv>): void {
         'This is RFC 8628 in shape, not a device grant against DoorDash — DoorDash Identity does not implement ' +
         'one. A human still performs the ordinary paste-back login in a real browser; this only routes the ' +
         'resulting session back to the device.',
-      request: { body: { required: false, content: { 'application/json': { schema: PairRequestBody } } } },
+      request: {
+        body: {
+          required: false,
+          content: {
+            'application/json': {
+              schema: PairRequestBody,
+              // Without these Swagger UI invents {"device_label": "string"},
+              // which reads as though the field were required.
+              examples: {
+                labelled: { summary: 'Name the device so the approver knows what it is', value: { device_label: 'Kitchen tablet' } },
+                anonymous: { summary: 'No label', value: {} },
+              },
+            },
+          },
+        },
+      },
       responses: {
         200: { description: 'Pairing started.', content: { 'application/json': { schema: PairRequestResponse } } },
         403: errorResponse('Pairing is disabled on this server.'),
@@ -285,7 +300,28 @@ export function registerPairingRoutes(app: OpenAPIHono<AppEnv>): void {
         '- `invalid_grant` — unrecognised device code, or the session was already collected. Stop.\n\n' +
         'On success the session credential is returned **once** and the pairing is deleted. Store it; a second ' +
         'poll gets `invalid_grant`. No cookie is set — this endpoint is for non-browser clients.',
-      request: { body: { required: true, content: { 'application/json': { schema: PairTokenRequest } } } },
+      request: {
+        body: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: PairTokenRequest,
+              // `grant_type` is optional here, but Swagger UI would prefill it
+              // as the literal "string" and every poll would 400.
+              examples: {
+                poll: {
+                  summary: 'Poll (normal case — grant_type is not needed)',
+                  value: { device_code: 'ddp1.…' },
+                },
+                rfcClient: {
+                  summary: 'With the RFC 8628 grant_type, for stock device-flow clients',
+                  value: { device_code: 'ddp1.…', grant_type: DEVICE_CODE_GRANT },
+                },
+              },
+            },
+          },
+        },
+      },
       responses: {
         200: { description: 'Approved; session issued.', content: { 'application/json': { schema: SessionResponse } } },
         400: errorResponse('Not ready, refused, expired, or an unknown device code — see the `error` field.'),
@@ -342,7 +378,20 @@ export function registerPairingRoutes(app: OpenAPIHono<AppEnv>): void {
       description:
         'The JSON equivalent of the first step of the /v1/auth/pair page. Confirms a code refers to a device that ' +
         'is genuinely waiting, and returns the DoorDash authorize URL plus a sealed approval ticket.',
-      request: { body: { required: true, content: { 'application/json': { schema: PairVerifyRequest } } } },
+      request: {
+        body: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: PairVerifyRequest,
+              examples: {
+                typed: { summary: 'The code as it appears on the device', value: { user_code: 'BCDF-GHJK' } },
+                messy: { summary: 'Case and hyphens do not matter', value: { user_code: 'bcdf ghjk' } },
+              },
+            },
+          },
+        },
+      },
       responses: {
         200: { description: 'Code recognised.', content: { 'application/json': { schema: PairVerifyResponse } } },
         400: errorResponse('Not a well-formed pairing code.'),
@@ -386,7 +435,32 @@ export function registerPairingRoutes(app: OpenAPIHono<AppEnv>): void {
         '**The session is not returned to you.** That is the difference from /v1/auth/login/complete: the caller ' +
         'here is approving access for someone else. Use /v1/auth/login/complete if you want a session for ' +
         'yourself.',
-      request: { body: { required: true, content: { 'application/json': { schema: PairCompleteRequest } } } },
+      request: {
+        body: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: PairCompleteRequest,
+              // Same either/or as /v1/auth/login/complete: `redirect_url` and
+              // `code`+`state` are alternatives, and a fabricated body showing
+              // all three suggests they are sent together. They must not be.
+              examples: {
+                pastedUrl: {
+                  summary: 'Paste the callback URL (normal case)',
+                  value: {
+                    approval_ticket: 'ddpa.…',
+                    redirect_url: 'http://localhost:4180/oauth2/callback?code=…&state=…',
+                  },
+                },
+                parsedParams: {
+                  summary: 'Already-parsed code and state',
+                  value: { approval_ticket: 'ddpa.…', code: '…', state: '…' },
+                },
+              },
+            },
+          },
+        },
+      },
       responses: {
         200: { description: 'Device approved.', content: { 'application/json': { schema: PairCompleteResponse } } },
         400: errorResponse('Bad ticket, state mismatch, or DoorDash rejected the code.'),
@@ -418,7 +492,19 @@ export function registerPairingRoutes(app: OpenAPIHono<AppEnv>): void {
       description:
         'Rejects a pairing you were asked to approve but did not start. The device is told `access_denied` on its ' +
         'next poll instead of being left to time out.',
-      request: { body: { required: true, content: { 'application/json': { schema: PairDenyRequest } } } },
+      request: {
+        body: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: PairDenyRequest,
+              examples: {
+                deny: { summary: 'Refuse the pairing', value: { approval_ticket: 'ddpa.…' } },
+              },
+            },
+          },
+        },
+      },
       responses: {
         200: {
           description: 'Pairing denied.',
