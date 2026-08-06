@@ -20,7 +20,23 @@ try {
   throw err
 }
 
-const app = createApp(cfg)
+let app
+try {
+  app = createApp(cfg)
+} catch (err) {
+  // Opening the session database is the first thing that touches disk, so a
+  // bad volume mount surfaces here. In a container that is the single most
+  // likely startup failure, and the raw SQLite error does not say what to do.
+  const code = (err as NodeJS.ErrnoException)?.code
+  if (code === 'EACCES' || code === 'EPERM' || code === 'SQLITE_CANTOPEN' || code === 'ENOENT') {
+    console.error(`Cannot open the session database at ${cfg.sessionDbPath} (${code}).`)
+    console.error('The directory must exist and be writable by the user this process runs as.')
+    console.error('In Docker that usually means the mounted volume is owned by another user:')
+    console.error('  chown -R 1000:1000 /path/to/your/ddrest/appdata')
+    process.exit(1)
+  }
+  throw err
+}
 
 const server = Bun.serve({
   hostname: cfg.host,

@@ -51,6 +51,57 @@ same-origin and therefore pass the CSRF origin check.
 The page loads the Swagger UI bundle from a CDN, so it needs internet access —
 the API itself does not.
 
+## Docker
+
+Images are published to GitHub Container Registry for `linux/amd64` and
+`linux/arm64`.
+
+```bash
+docker run -d --name ddrest -p 8787:8787 \
+  -e SESSION_KEYS="$(openssl rand -base64 32)" \
+  -v /path/to/appdata:/data \
+  ghcr.io/larveyofficial/ddrest:latest
+```
+
+`SESSION_KEYS` is the only required setting. `openssl rand -base64 32` produces
+exactly the format it wants, so no Bun install is needed to generate one.
+
+The container starts as root only to fix ownership of `/data`, then drops to
+`PUID`:`PGID` (default `1000:1000`). Pass `--user` instead if you would rather
+pin it yourself — the entrypoint handles both.
+
+| Setting | Default in image | Notes |
+| --- | --- | --- |
+| `SESSION_KEYS` | *(none)* | Required. Container exits with instructions if unset. |
+| `HOST` | `0.0.0.0` | Overridden from the `127.0.0.1` default, which would be unreachable. |
+| `SESSION_DB_PATH` | `/data/sessions.db` | Mount `/data` to keep sessions across recreates. |
+| `PUID` / `PGID` | `1000` / `1000` | Ownership of `/data`. Unraid uses `99` / `100`. |
+
+**Cookies over plain HTTP.** `COOKIE_SECURE` defaults to `true`, so a browser
+reaching this over `http://host:8787` will silently drop the session cookie.
+Set `COOKIE_SECURE=false` for LAN-only HTTP, or put it behind a reverse proxy
+with TLS and leave it alone. Bearer tokens work either way.
+
+## Unraid
+
+[`unraid/ddREST.xml`](unraid/ddREST.xml) is a Community-Applications-style
+template. Copy it to `/boot/config/plugins/dockerMan/templates-user/` on your
+server, then *Docker → Add Container* and pick **ddREST** from the template
+dropdown.
+
+Generate the key on the Unraid terminal first:
+
+```bash
+openssl rand -base64 32
+```
+
+Paste that into `SESSION_KEYS`. The template defaults `PUID`/`PGID` to `99`/`100`
+and `COOKIE_SECURE` to `false`, which is what LAN-only HTTP access needs; the
+rest is optional and hidden under *Advanced*. The WebUI button opens `/docs`.
+
+The template ships no icon. Drop a PNG somewhere reachable and add an `<Icon>`
+element if you want one in the Docker tab.
+
 ## Logging in
 
 DoorDash redirects to a port nothing is listening on, so the browser shows

@@ -1,0 +1,19 @@
+# Secrets and local state must never reach the build context.
+.env
+.env.*
+!.env.example
+data/
+
+.git
+.github
+.idea
+node_modules
+
+# Not needed at runtime.
+test
+mock
+unraid
+README.md
+Dockerfile
+.dockerignore
+*.log

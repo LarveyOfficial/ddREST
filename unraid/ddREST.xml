@@ -1,0 +1,94 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>ddREST</Name>
+  <Repository>ghcr.io/larveyofficial/ddrest:latest</Repository>
+  <Registry>https://github.com/LarveyOfficial/ddREST/pkgs/container/ddrest</Registry>
+  <Branch>
+    <Tag>latest</Tag>
+    <TagDescription>Tracks main.</TagDescription>
+  </Branch>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/LarveyOfficial/ddREST/issues</Support>
+  <Project>https://github.com/LarveyOfficial/ddREST</Project>
+  <Overview>
+A REST implementation of the DoorDash Consumer MCP server.
+
+The gateway speaks JSON-RPC 2.0 over Server-Sent Events; ddREST puts conventional REST resources in front of it, so callers never see JSON-RPC or SSE. Browse Swagger UI at /docs once the container is running.
+
+SETUP
+1. Generate a session key on your Unraid terminal and paste it into SESSION_KEYS:
+     openssl rand -base64 32
+2. Start the container and open the WebUI.
+3. POST /v1/auth/login/start, open the returned authorize_url in a browser, sign in, then paste the http://localhost:4180/... URL it lands on (it will fail to load - that is expected) into POST /v1/auth/login/complete.
+
+Sessions renew themselves after that; you will not need to log in again until the session's hard expiry.
+
+COOKIES OVER PLAIN HTTP
+Reaching this over http://tower:8787 means browsers will refuse the session cookie unless COOKIE_SECURE is false, which is the default in this template. Bearer tokens work either way. If you put it behind a reverse proxy with TLS, set COOKIE_SECURE back to true.
+
+REQUIRES A DOORDASH ALLOWLISTED ACCOUNT
+DoorDash's MCP access is waitlist-only. Without an approved account this will not work. Not affiliated with or supported by DoorDash; their terms govern your use.
+  </Overview>
+  <Category>Tools: Network:Web HomeAutomation:</Category>
+  <WebUI>http://[IP]:[PORT:8787]/docs</WebUI>
+  <TemplateURL/>
+  <Icon/>
+  <ExtraParams/>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled/>
+  <DonateText/>
+  <DonateLink/>
+  <Requires>An allowlisted DoorDash account (waitlist: https://github.com/doordash-oss/doordash-cli).</Requires>
+
+  <Config Name="WebUI Port" Target="8787" Default="8787" Mode="tcp"
+          Description="Port for the REST API and the Swagger UI at /docs."
+          Type="Port" Display="always" Required="true" Mask="false">8787</Config>
+
+  <Config Name="Data" Target="/data" Default="/mnt/user/appdata/ddrest" Mode="rw"
+          Description="Holds the session database. Losing it just means logging in again."
+          Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/ddrest</Config>
+
+  <Config Name="SESSION_KEYS" Target="SESSION_KEYS" Default="" Mode=""
+          Description="REQUIRED. Generate on your Unraid terminal with:  openssl rand -base64 32  &#13;&#10;Protects short-lived login tickets only. Changing it invalidates in-flight logins, nothing more. Comma-separate to rotate: the first seals, all decrypt."
+          Type="Variable" Display="always" Required="true" Mask="true"/>
+
+  <Config Name="COOKIE_SECURE" Target="COOKIE_SECURE" Default="false" Mode=""
+          Description="Set false for plain http on your LAN, otherwise browsers silently drop the session cookie. Set true when behind a reverse proxy with TLS."
+          Type="Variable" Display="always" Required="true" Mask="false">false</Config>
+
+  <Config Name="PUID" Target="PUID" Default="99" Mode=""
+          Description="User id that owns the data directory. 99 is Unraid's nobody."
+          Type="Variable" Display="advanced" Required="false" Mask="false">99</Config>
+
+  <Config Name="PGID" Target="PGID" Default="100" Mode=""
+          Description="Group id that owns the data directory. 100 is Unraid's users."
+          Type="Variable" Display="advanced" Required="false" Mask="false">100</Config>
+
+  <Config Name="SESSION_MAX_AGE_SECONDS" Target="SESSION_MAX_AGE_SECONDS" Default="2592000" Mode=""
+          Description="Hard end of a session regardless of renewals; reaching it forces a new browser login. DoorDash imposes no cap of its own, so this is policy. 604800=7d, 2592000=30d, 7776000=90d, 31536000=365d."
+          Type="Variable" Display="advanced" Required="false" Mask="false">2592000</Config>
+
+  <Config Name="SESSION_IDLE_TIMEOUT_SECONDS" Target="SESSION_IDLE_TIMEOUT_SECONDS" Default="1209600" Mode=""
+          Description="Drop a session unused for this long. Must be shorter than SESSION_MAX_AGE_SECONDS or it can never fire. 1209600=14d."
+          Type="Variable" Display="advanced" Required="false" Mask="false">1209600</Config>
+
+  <Config Name="CORS_ORIGINS" Target="CORS_ORIGINS" Default="" Mode=""
+          Description="Comma-separated origins allowed to call this from a browser on another domain. Leave empty unless you are building a web UI against it."
+          Type="Variable" Display="advanced" Required="false" Mask="false"/>
+
+  <Config Name="TRUSTED_ORIGINS" Target="TRUSTED_ORIGINS" Default="" Mode=""
+          Description="Extra origins accepted for cookie-authenticated writes. Set this to your proxy's public origin when running behind a reverse proxy."
+          Type="Variable" Display="advanced" Required="false" Mask="false"/>
+
+  <Config Name="DEFAULT_LATITUDE" Target="DEFAULT_LATITUDE" Default="37.3346" Mode=""
+          Description="Fallback latitude for restaurant search when a request omits coordinates."
+          Type="Variable" Display="advanced" Required="false" Mask="false">37.3346</Config>
+
+  <Config Name="DEFAULT_LONGITUDE" Target="DEFAULT_LONGITUDE" Default="-122.0090" Mode=""
+          Description="Fallback longitude for restaurant search when a request omits coordinates."
+          Type="Variable" Display="advanced" Required="false" Mask="false">-122.0090</Config>
+</Container>

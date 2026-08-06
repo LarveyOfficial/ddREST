@@ -104,7 +104,9 @@ function parseKeys(raw: string): Buffer[] {
     .map((s) => s.trim())
     .filter(Boolean)
   if (parts.length === 0) {
-    throw new ConfigError('SESSION_KEYS is required. Generate one with: bun run keygen')
+    throw new ConfigError(
+      'SESSION_KEYS is required. Generate one with:  openssl rand -base64 32   (or: bun run keygen)',
+    )
   }
   return parts.map((part, i) => {
     let key: Buffer
@@ -115,7 +117,8 @@ function parseKeys(raw: string): Buffer[] {
     }
     if (key.length !== 32) {
       throw new ConfigError(
-        `SESSION_KEYS[${i}] must decode to exactly 32 bytes (got ${key.length}). Generate one with: bun run keygen`,
+        `SESSION_KEYS[${i}] must decode to exactly 32 bytes (got ${key.length}). ` +
+          'Generate one with:  openssl rand -base64 32',
       )
     }
     return key
