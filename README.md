@@ -469,6 +469,28 @@ ships a change.
 `tip_amount_cents` is required rather than defaulted, so a tip is always
 deliberate.
 
+### Locations
+
+Anywhere coordinates are accepted — `GET /v1/restaurants` and
+`GET /v1/nearby-stores` — you can pass an `address_id` from
+`GET /v1/addresses` instead, and ddREST reads the coordinates off the saved
+address for you:
+
+```bash
+curl -s "http://localhost:8787/v1/restaurants?query=pizza&address_id=addr-home" \
+  -H "authorization: Bearer dds2.…"
+```
+
+That costs one extra upstream lookup, so passing `latitude`/`longitude`
+directly stays the cheaper path. Nothing is cached — an address you just added
+would otherwise be invisible until a TTL elapsed.
+
+Sending `address_id` *and* coordinates is refused rather than picking a winner,
+since the two can disagree and you would have no way to tell which was used. An
+unknown id returns `address_not_found` and lists the ids that do exist; a saved
+address with no coordinates on it returns `address_missing_coordinates` rather
+than quietly falling back to the configured default.
+
 The auth and pairing routes are not tool-backed:
 
 | Method | Path | Purpose |

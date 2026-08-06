@@ -52,3 +52,11 @@ export const OrderUuidParam = z.string().min(1).meta({ description: 'Order UUID.
 /** Query params arrive as strings; coerce then bound. */
 export const LatitudeQuery = z.coerce.number().min(-90).max(90)
 export const LongitudeQuery = z.coerce.number().min(-180).max(180)
+
+/** Alternative to latitude/longitude on any endpoint that takes a location. */
+export const AddressIdQuery = z.string().min(1).meta({
+  description:
+    'An id from GET /v1/addresses, used instead of latitude/longitude — the coordinates are looked up from the ' +
+    'saved address. Cannot be combined with latitude/longitude.',
+  example: 'addr_123',
+})

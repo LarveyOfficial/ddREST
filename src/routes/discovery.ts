@@ -4,7 +4,12 @@ import { createRoute, z, type OpenAPIHono } from '@hono/zod-openapi'
 import type { AppEnv } from '../types.ts'
 import { TOOLS } from '../mcp/tools.ts'
 import { callTool, security, toolResponses } from './shared.ts'
-import { LatitudeQuery, LongitudeQuery, StoreIdParam } from '../schemas/common.ts'
+import { AddressIdQuery, LatitudeQuery, LongitudeQuery, StoreIdParam } from '../schemas/common.ts'
+import { resolveLocation } from './location.ts'
+
+const LOCATION_NOTE =
+  'Give a location as either `latitude`+`longitude` or an `address_id` from GET /v1/addresses — not both. ' +
+  'Using `address_id` costs one extra upstream lookup to read the coordinates off the saved address.'
 
 const tags = ['Discovery']
 
@@ -16,13 +21,15 @@ export function registerDiscoveryRoutes(app: OpenAPIHono<AppEnv>): void {
       path: '/v1/restaurants',
       tags,
       summary: 'Search for restaurants near a location',
-      description: 'Latitude/longitude fall back to DEFAULT_LATITUDE/DEFAULT_LONGITUDE when omitted.',
+      description:
+        `${LOCATION_NOTE} With no location at all, DEFAULT_LATITUDE/DEFAULT_LONGITUDE are used.`,
       security,
       request: {
         query: z.object({
           query: z.string().min(1).meta({ example: 'pizza near me' }),
           latitude: LatitudeQuery.optional(),
           longitude: LongitudeQuery.optional(),
+          address_id: AddressIdQuery.optional(),
           limit: z.coerce.number().int().min(1).max(50).default(5),
         }),
       },
@@ -30,7 +37,8 @@ export function registerDiscoveryRoutes(app: OpenAPIHono<AppEnv>): void {
     }),
     async (c) => {
       const cfg = c.get('config')
-      const { query, latitude, longitude, limit } = c.req.valid('query')
+      const { query, limit, ...location } = c.req.valid('query')
+      const { latitude, longitude } = await resolveLocation(c, location)
       return c.json(
         await callTool(c, TOOLS.findRestaurants, {
           query,
@@ -49,6 +57,7 @@ export function registerDiscoveryRoutes(app: OpenAPIHono<AppEnv>): void {
       path: '/v1/nearby-stores',
       tags,
       summary: 'Find nearby non-restaurant stores',
+      description: LOCATION_NOTE,
       security,
       request: {
         query: z.object({
@@ -62,12 +71,14 @@ export function registerDiscoveryRoutes(app: OpenAPIHono<AppEnv>): void {
           limit: z.coerce.number().int().min(1).max(50).default(5),
           latitude: LatitudeQuery.optional(),
           longitude: LongitudeQuery.optional(),
+          address_id: AddressIdQuery.optional(),
         }),
       },
       responses: toolResponses('Nearby stores.'),
     }),
     async (c) => {
-      const { vertical_scope, limit, latitude, longitude } = c.req.valid('query')
+      const { vertical_scope, limit, ...location } = c.req.valid('query')
+      const { latitude, longitude } = await resolveLocation(c, location)
       // Upstream expects these paired, so send both or neither.
       const hasCoords = latitude !== undefined && longitude !== undefined
       return c.json(

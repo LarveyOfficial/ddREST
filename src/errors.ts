@@ -28,6 +28,8 @@ export type ErrorCode =
   | 'pairing_expired'
   | 'pairing_conflict'
   | 'too_many_requests'
+  | 'address_not_found'
+  | 'address_missing_coordinates'
   | 'doordash_unauthorized'
   | 'doordash_forbidden'
   | 'doordash_tool_error'
