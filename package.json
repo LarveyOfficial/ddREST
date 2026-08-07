@@ -15,7 +15,8 @@
     "list-tools": "bun scripts/list-tools.ts",
     "gen-schemas": "bun scripts/gen-result-schemas.ts",
     "mock": "bun mock/upstream.ts",
-    "compare-tools": "bun scripts/compare-tools.ts"
+    "compare-tools": "bun scripts/compare-tools.ts",
+    "capture-shapes": "bun scripts/capture-shapes.ts"
   },
   "dependencies": {
     "@hono/zod-openapi": "^1.5.1",
