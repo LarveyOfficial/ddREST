@@ -135,6 +135,29 @@ function findAddress(result: unknown, addressId: string): Record<string, unknown
   return undefined
 }
 
+/**
+ * Coordinates of the account's default saved address, given a raw
+ * doordash_list_delivery_addresses result.
+ *
+ * Exported for scripts/capture-shapes.ts, which needs somewhere real to search
+ * from and should use the same notion of "default" this API does rather than a
+ * second implementation that could drift.
+ */
+export function defaultAddressCoordinates(addressList: unknown): ResolvedLocation | undefined {
+  const address = findDefaultAddress(addressList)
+  return address ? coordinatesOf(address) : undefined
+}
+
+/** Coordinates of any saved address that has them — a fallback when none is default. */
+export function anyAddressCoordinates(addressList: unknown): ResolvedLocation | undefined {
+  for (const obj of walkObjects(addressList)) {
+    if (idOf(obj) === undefined) continue
+    const coords = coordinatesOf(obj)
+    if (coords) return coords
+  }
+  return undefined
+}
+
 /** The entry flagged as the account's default, if any is. */
 function findDefaultAddress(result: unknown): Record<string, unknown> | undefined {
   for (const obj of walkObjects(result)) {

@@ -17,8 +17,9 @@
  * has nothing to render from that but `additionalProp1/2/3`.
  *
  * So this calls the read-only tools for real and infers the shape from what
- * comes back. It chains: the addresses give coordinates, a restaurant search
- * gives a store, the menu gives an item, and so on — no ids to paste in.
+ * comes back. It chains: the account's default address gives coordinates, a
+ * restaurant search gives a store, the menu gives an item, and so on — no ids
+ * to paste in.
  *
  * **Only types are recorded, never values.** Real responses carry the account's
  * addresses, order history and payment methods, and the output of this script is
@@ -37,6 +38,7 @@ import { deriveCodeChallenge, generateCodeVerifier, generateState } from '../src
 import { buildAuthorizeUrl, exchangeCodeForToken, parseCallbackUrl } from '../src/auth/oauth.ts'
 import { parseEnvelope } from '../src/mcp/client.ts'
 import { TOOLS, intentFor, type ToolName } from '../src/mcp/tools.ts'
+import { anyAddressCoordinates, defaultAddressCoordinates } from '../src/routes/location.ts'
 
 const OUT = 'data/observed-shapes.json'
 
@@ -243,9 +245,25 @@ const addresses = await call(TOOLS.listDeliveryAddresses, {})
 record(TOOLS.listDeliveryAddresses, addresses)
 record(TOOLS.getPaymentInfo, await call(TOOLS.getPaymentInfo, {}))
 
-const lat = Number(pluck(addresses, ['lat', 'latitude']) ?? cfg.defaultLatitude)
-const lng = Number(pluck(addresses, ['lng', 'longitude']) ?? cfg.defaultLongitude)
-console.log(`   using ${lat.toFixed(4)}, ${lng.toFixed(4)}`)
+/**
+ * Search from the account's default address.
+ *
+ * Coverage depends on the searches returning something: an address the user
+ * actually orders to has restaurants and grocery stores around it, whereas the
+ * configured fallback coordinates are a stand-in that may have neither. Uses
+ * the API's own notion of "default" rather than a second implementation.
+ */
+const fromDefault = defaultAddressCoordinates(addresses)
+const fromAny = fromDefault ?? anyAddressCoordinates(addresses)
+const lat = fromAny?.latitude ?? cfg.defaultLatitude
+const lng = fromAny?.longitude ?? cfg.defaultLongitude
+
+const origin = fromDefault
+  ? 'default saved address'
+  : fromAny
+    ? 'a saved address (none is marked default)'
+    : 'DEFAULT_LATITUDE/DEFAULT_LONGITUDE (no saved address has coordinates)'
+console.log(`   searching from ${lat.toFixed(4)}, ${lng.toFixed(4)} — ${origin}`)
 
 console.log('\n discovery')
 const restaurants = await call(TOOLS.findRestaurants, { query: 'pizza', latitude: lat, longitude: lng, max_stores: 5 })
