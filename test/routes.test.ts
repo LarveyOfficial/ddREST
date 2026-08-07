@@ -310,17 +310,18 @@ const CASES: Case[] = [
     name: 'update cart item quantity',
     method: 'PATCH',
     path: '/v1/carts/cart-7/items/line-3',
-    body: { quantity: 4 },
+    // menu_item_id supplied, so no cart lookup is needed here.
+    body: { quantity: 4, menu_item_id: 'menu-9' },
     tool: TOOLS.updateCartItem,
-    required: ['cart_id', 'item_id', 'quantity'],
+    required: ['cart_id', 'item_id', 'quantity', 'menu_item_id'],
     // The path carries the cart-line id; upstream calls the pair cart_id/item_id.
-    expect: { cart_id: 'cart-7', item_id: 'line-3', quantity: 4 },
+    expect: { cart_id: 'cart-7', item_id: 'line-3', quantity: 4, menu_item_id: 'menu-9' },
   },
   {
     name: 'remove an item by setting quantity to zero',
     method: 'PATCH',
     path: '/v1/carts/cart-7/items/line-3',
-    body: { quantity: 0 },
+    body: { quantity: 0, menu_item_id: 'menu-9' },
     tool: TOOLS.updateCartItem,
     required: ['cart_id', 'item_id', 'quantity'],
     expect: { quantity: 0 },

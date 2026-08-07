@@ -1,6 +1,7 @@
 /** Cart lifecycle, plus the grocery product-list builder. */
 
 import { createRoute, z, type OpenAPIHono } from '@hono/zod-openapi'
+import { ApiError } from '../errors.ts'
 import type { AppEnv } from '../types.ts'
 import { TOOLS } from '../mcp/tools.ts'
 import { callTool, security, toolResponses } from './shared.ts'
@@ -60,6 +61,59 @@ async function withResolvedStoreAndMenu<T extends { store_id: string; menu_id?: 
 ): Promise<T & { store_id: string; menu_id: string }> {
   const store_id = await resolveStoreId(c, body.store_id)
   return { ...body, store_id, menu_id: await resolveMenuId(c, store_id, body.menu_id) }
+}
+
+/**
+ * The menu item id for a cart line, read off the cart.
+ *
+ * internal_update_cart_item advertises menu_item_id as optional but rejects the
+ * call without it, so we fill it in. On a cart line, `id` is the cart-line id
+ * (what the caller passes in the path) and `item_id` is the menu item id the
+ * gateway wants. A line we cannot find, or one carrying no item_id, is a clear
+ * error rather than a call left to fail upstream with a vaguer one.
+ */
+async function resolveMenuItemId(
+  c: Parameters<typeof callTool>[0],
+  cartId: string,
+  cartLineId: string,
+): Promise<string> {
+  const cart = await callTool(c, TOOLS.getCart, { cart_uuid: cartId })
+  for (const obj of walkObjects(cart)) {
+    if (idString(obj.id) !== cartLineId) continue
+    const menuItemId = idString(obj.item_id)
+    if (menuItemId !== undefined) return menuItemId
+    throw new ApiError(
+      400,
+      'invalid_request',
+      `Cart line ${JSON.stringify(cartLineId)} carries no item_id to send as menu_item_id. Pass menu_item_id ` +
+        'in the body.',
+      { cart: `/v1/carts/${cartId}` },
+    )
+  }
+  throw new ApiError(
+    400,
+    'invalid_request',
+    `No line with id ${JSON.stringify(cartLineId)} is in that cart. The path takes the cart-line id (an ` +
+      'entry’s `id`), not the menu item_id.',
+    { cart: `/v1/carts/${cartId}` },
+  )
+}
+
+function idString(value: unknown): string | undefined {
+  if (typeof value === 'string' && value !== '') return value
+  if (typeof value === 'number') return String(value)
+  return undefined
+}
+
+function* walkObjects(value: unknown): Generator<Record<string, unknown>> {
+  if (Array.isArray(value)) {
+    for (const item of value) yield* walkObjects(item)
+    return
+  }
+  if (value !== null && typeof value === 'object') {
+    yield value as Record<string, unknown>
+    for (const nested of Object.values(value)) yield* walkObjects(nested)
+  }
 }
 
 export function registerCartRoutes(app: OpenAPIHono<AppEnv>): void {
@@ -199,7 +253,9 @@ export function registerCartRoutes(app: OpenAPIHono<AppEnv>): void {
         '`cart_item_id` is the **cart-line id** — the `id` on an entry of the cart’s `items`, not the menu ' +
         '`item_id`. The same id the delete route takes.\n\n' +
         'Setting `quantity` to 0 removes the item, which is what `DELETE` on this path does. Use whichever reads ' +
-        'better; they end up in the same place.',
+        'better; they end up in the same place.\n\n' +
+        'The gateway needs the line’s menu item id too. Omit `menu_item_id` and it is read off the cart for you, ' +
+        'at the cost of one extra lookup; pass it to skip that.',
       security,
       request: {
         params: z.object({ cart_uuid: CartUuidParam, cart_item_id: z.string().min(1) }),
@@ -212,8 +268,9 @@ export function registerCartRoutes(app: OpenAPIHono<AppEnv>): void {
                   quantity: z.int().min(0).meta({ description: 'New quantity. 0 removes the item.' }),
                   menu_item_id: z.string().min(1).optional().meta({
                     description:
-                      'The menu item id for this line (`item_id` on the cart entry). Optional, and distinct ' +
-                      'from the cart-line id in the path.',
+                      'The menu item id for this line (`item_id` on the cart entry, distinct from the cart-line ' +
+                      'id in the path). Omit to have it resolved from the cart. The gateway rejects the call ' +
+                      'without it, despite advertising it as optional.',
                   }),
                 })
                 .openapi('UpdateCartItemBody'),
@@ -225,14 +282,11 @@ export function registerCartRoutes(app: OpenAPIHono<AppEnv>): void {
     }),
     async (c) => {
       const { cart_uuid, cart_item_id } = c.req.valid('param')
-      const { quantity, menu_item_id } = c.req.valid('json')
+      const { quantity } = c.req.valid('json')
+      const cart_id = await resolveCartUuid(c, cart_uuid)
+      const menu_item_id = c.req.valid('json').menu_item_id ?? (await resolveMenuItemId(c, cart_id, cart_item_id))
       return c.json(
-        await callTool(c, TOOLS.updateCartItem, {
-          cart_id: await resolveCartUuid(c, cart_uuid),
-          item_id: cart_item_id,
-          quantity,
-          menu_item_id,
-        }),
+        await callTool(c, TOOLS.updateCartItem, { cart_id, item_id: cart_item_id, quantity, menu_item_id }),
       )
     },
   )

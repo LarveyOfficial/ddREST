@@ -152,6 +152,38 @@ describe('menu_id resolution', () => {
     expect(lastCall().args.menu_id).toBe('menu-mine')
   })
 
+  test('an omitted menu_item_id on PATCH is read off the cart line', async () => {
+    h.mock.setToolResult((tool) => {
+      if (tool === TOOLS.getCart) {
+        return { cart: { items: [{ id: 'line-3', item_id: 'menu-9', quantity: 1 }] } }
+      }
+      return { ok: true }
+    })
+    const res = await h.request('/v1/carts/cart-7/items/line-3', {
+      method: 'PATCH',
+      headers: auth,
+      body: JSON.stringify({ quantity: 2 }),
+    })
+
+    expect(res.status).toBe(200)
+    expect(lastCall().tool).toBe(TOOLS.updateCartItem)
+    expect(lastCall().args).toMatchObject({ cart_id: 'cart-7', item_id: 'line-3', menu_item_id: 'menu-9', quantity: 2 })
+  })
+
+  test('PATCH with an unknown cart-line id explains the id it wanted', async () => {
+    h.mock.setToolResult(() => ({ cart: { items: [{ id: 'line-other', item_id: 'menu-1' }] } }))
+    const res = await h.request('/v1/carts/cart-7/items/line-3', {
+      method: 'PATCH',
+      headers: auth,
+      body: JSON.stringify({ quantity: 2 }),
+    })
+
+    expect(res.status).toBe(400)
+    expect((await res.json()) as { error: string }).toMatchObject({ error: 'invalid_request' })
+    // Never reached the update — no menu_item_id to send.
+    expect(h.mock.calls.some((call) => call.tool === TOOLS.updateCartItem)).toBe(false)
+  })
+
   test('a supplied menu_id costs no extra call', async () => {
     h.mock.setToolResult(fixtures())
     await h.request('/v1/carts/items', {
