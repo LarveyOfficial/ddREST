@@ -32,7 +32,7 @@ export interface MockUpstream {
   /** Next tool result. Defaults to an echo of the arguments. */
   setToolResult(fn: (tool: string, args: Record<string, unknown>) => unknown): void
   /** Force the next MCP response to a given status/body. */
-  setToolFailure(failure: { status: number; body: unknown } | undefined): void
+  setToolFailure(failure: { status: number; body: unknown; headers?: Record<string, string> } | undefined): void
   /** Replace the whole JSON-RPC envelope, to exercise error and isError paths. */
   setEnvelope(fn: ((tool: string, id: number) => unknown) | undefined): void
   /** Reply as plain JSON instead of SSE, to exercise both transports. */
@@ -80,7 +80,7 @@ export function startMockUpstream(port = 0): MockUpstream {
     tool,
     echoed_arguments: args,
   })
-  let toolFailure: { status: number; body: unknown } | undefined
+  let toolFailure: { status: number; body: unknown; headers?: Record<string, string> } | undefined
   let envelopeOverride: ((tool: string, id: number) => unknown) | undefined
   let plainJson = false
   let codeCounter = 0
@@ -157,7 +157,7 @@ export function startMockUpstream(port = 0): MockUpstream {
         if (authorization !== `Bearer ${currentAccess}`) {
           return json(401, { error: 'The user is unauthorized.' })
         }
-        if (toolFailure) return json(toolFailure.status, toolFailure.body)
+        if (toolFailure) return json(toolFailure.status, toolFailure.body, toolFailure.headers)
 
         const body = (await req.json()) as {
           method?: string
@@ -250,8 +250,11 @@ export function startMockUpstream(port = 0): MockUpstream {
   }
 }
 
-function json(status: number, body: unknown): Response {
-  return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
+function json(status: number, body: unknown, extraHeaders?: Record<string, string>): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json', ...extraHeaders },
+  })
 }
 
 if (import.meta.main) {

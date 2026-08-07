@@ -34,11 +34,9 @@ const AddItemsBody = z
     items: z.array(CartItemInputSchema).min(1),
     include_pricing: z.boolean().optional().meta({ description: PRICING_NOTE }),
     is_pickup: z.boolean().optional().meta({ description: 'New carts default to delivery.' }),
-    spend_limit_cents: z
-      .int()
-      .min(0)
-      .optional()
-      .meta({ description: 'Per-participant limit for a new host-pays group cart. Requires group_cart_config.' }),
+    // Per-participant group-cart limit lives inside group_cart_config, which is
+    // where doordash_add_to_cart declares it. A top-level copy was both
+    // redundant and rejected by the gateway's strict validator when set.
     group_cart_config: GroupCartConfigSchema.optional(),
   })
   .openapi('AddCartItemsBody')

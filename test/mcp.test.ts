@@ -123,6 +123,18 @@ describe('transport behaviour end to end', () => {
     expect(JSON.parse(text).error).toBe('upstream_error')
   })
 
+  test('maps an upstream 429 to 429 and forwards its Retry-After', async () => {
+    const { sessionToken } = await login(h)
+    h.mock.setToolFailure({ status: 429, body: { error: 'rate limited' }, headers: { 'retry-after': '12' } })
+
+    const res = await h.request('/v1/addresses', { headers: bearer(sessionToken) })
+    expect(res.status).toBe(429)
+    expect(res.headers.get('retry-after')).toBe('12')
+    const body = (await res.json()) as { error: string; retry_after_seconds: number }
+    expect(body.error).toBe('too_many_requests')
+    expect(body.retry_after_seconds).toBe(12)
+  })
+
   test('surfaces an isError result as doordash_tool_error', async () => {
     const { sessionToken } = await login(h)
     h.mock.setEnvelope((tool, id) => ({

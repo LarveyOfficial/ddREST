@@ -23,13 +23,15 @@
  * field at any time and a response carrying one must still pass through
  * untouched, so nothing here is enforced at runtime.
  *
- * advertised only:        17
+ * advertised only:        18
  * advertised + observed:  9
  * observed only:          5
- * still undocumented:     3
+ * still undocumented:     5
  *   - internal_get_item_details
  *   - internal_set_delivery_instructions
  *   - internal_set_address_label
+ *   - doordash_address_autocomplete
+ *   - doordash_select_address
  */
 
 /** Shared object definitions, hoisted out of each tool's `$defs`. */
@@ -1422,6 +1424,61 @@ export const SHARED_RESULT_DEFS: Record<string, unknown> = {
       "quantity"
     ],
     "title": "OrderItem",
+    "type": "object"
+  },
+  "DDMicItem": {
+    "description": "Projected fields for a single MIC carousel item, LLM-friendly.",
+    "properties": {
+      "item_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Item Id"
+      },
+      "item_name": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Item Name"
+      },
+      "price_display": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Price Display"
+      },
+      "image_url": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Image Url"
+      }
+    },
+    "title": "MicItem",
     "type": "object"
   }
 }
@@ -7326,6 +7383,81 @@ export const TOOL_RESULT_SCHEMAS: Record<string, { component: string; schema: Re
       "additionalProperties": true
     },
     "source": "observed"
+  },
+  "internal_get_mic_carousel": {
+    "component": "DDGetMicCarouselResult",
+    "schema": {
+      "description": "Response data for internal_get_mic_carousel.",
+      "properties": {
+        "success": {
+          "default": true,
+          "title": "Success",
+          "type": "boolean"
+        },
+        "applicable": {
+          "default": false,
+          "title": "Applicable",
+          "type": "boolean"
+        },
+        "headline": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Headline"
+        },
+        "items": {
+          "default": [],
+          "items": {
+            "$ref": "#/components/schemas/DDMicItem"
+          },
+          "title": "Items",
+          "type": "array"
+        },
+        "total_items": {
+          "default": 0,
+          "title": "Total Items",
+          "type": "integer"
+        },
+        "store_id": {
+          "title": "Store Id",
+          "type": "integer"
+        },
+        "trace_id": {
+          "title": "Trace Id",
+          "type": "string"
+        },
+        "timestamp": {
+          "title": "Timestamp",
+          "type": "string"
+        },
+        "message": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Message"
+        }
+      },
+      "required": [
+        "store_id",
+        "trace_id",
+        "timestamp"
+      ],
+      "title": "MicCarouselData",
+      "type": "object"
+    },
+    "source": "advertised"
   },
   "doordash_list_delivery_addresses": {
     "component": "DDListDeliveryAddressesResult",

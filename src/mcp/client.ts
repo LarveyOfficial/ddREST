@@ -85,7 +85,7 @@ export class McpClient {
 
     const text = await response.text()
 
-    if (!response.ok) throw mapGatewayError(response.status, text)
+    if (!response.ok) throw mapGatewayError(response.status, text, response.headers)
 
     const envelope = parseEnvelope(text, response.headers.get('content-type'))
     if (!envelope) {
@@ -95,12 +95,26 @@ export class McpClient {
   }
 }
 
-function mapGatewayError(status: number, rawBody: string): ApiError {
+function mapGatewayError(status: number, rawBody: string, headers?: Headers): ApiError {
   let body: { error?: string } = {}
   try {
     body = JSON.parse(rawBody) as { error?: string }
   } catch {
     /* non-JSON error bodies happen; fall through with what we have */
+  }
+
+  if (status === 429) {
+    // A rate-limit is recoverable, so surface it as one rather than an opaque
+    // 502. Carrying the upstream Retry-After through means errors.ts can put it
+    // on the header, and — because 429 is not in hints.ts's HINTABLE set — we
+    // do not fire a second listing call straight back into the same limit.
+    const retryAfter = parseRetryAfter(headers?.get('retry-after'))
+    return new ApiError(
+      429,
+      'too_many_requests',
+      'DoorDash is rate-limiting requests. Retry after a short wait.',
+      { upstream_error: body.error, ...(retryAfter !== undefined ? { retry_after_seconds: retryAfter } : {}) },
+    )
   }
 
   if (status === 401) {
@@ -133,6 +147,23 @@ function mapGatewayError(status: number, rawBody: string): ApiError {
 }
 
 /**
+ * A `Retry-After` value in seconds.
+ *
+ * RFC 7231 allows either delta-seconds or an HTTP-date; accept both and reject
+ * anything that lands in the past or does not parse, so a bad header degrades to
+ * "no advice" rather than a negative wait.
+ */
+function parseRetryAfter(value: string | null | undefined): number | undefined {
+  if (!value) return undefined
+  const seconds = Number(value)
+  if (Number.isFinite(seconds)) return seconds > 0 ? Math.ceil(seconds) : undefined
+  const at = Date.parse(value)
+  if (Number.isNaN(at)) return undefined
+  const delta = Math.ceil((at - Date.now()) / 1000)
+  return delta > 0 ? delta : undefined
+}
+
+/**
  * Accepts either a plain JSON body or an SSE stream, since both turn up on a
  * 200.
  */
@@ -157,9 +188,10 @@ export function parseEnvelope(text: string, contentType: string | null): JsonRpc
     if (payload === '[DONE]') return undefined
     try {
       const parsed = JSON.parse(payload) as JsonRpcEnvelope
-      return parsed.jsonrpc !== undefined || parsed.result !== undefined || parsed.error !== undefined
-        ? parsed
-        : undefined
+      // A response carries result or error. A notification/progress frame carries
+      // only `jsonrpc` + `method`; skip it and keep scanning for the real reply
+      // rather than handing it back as an empty envelope.
+      return parsed.result !== undefined || parsed.error !== undefined ? parsed : undefined
     } catch {
       return undefined
     }
