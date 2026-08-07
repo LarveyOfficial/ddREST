@@ -25,7 +25,7 @@ export function registerPromotionRoutes(app: OpenAPIHono<AppEnv>): void {
       summary: 'List promotions the account is eligible for at a store',
       security,
       request: { params: z.object({ store_id: StoreIdParam }) },
-      responses: toolResponses('Eligible promotions.'),
+      responses: toolResponses('Eligible promotions.', TOOLS.listPromotions),
     }),
     async (c) => {
       const { store_id } = c.req.valid('param')
@@ -54,7 +54,7 @@ export function registerPromotionRoutes(app: OpenAPIHono<AppEnv>): void {
           },
         },
       },
-      responses: toolResponses('Updated cart.'),
+      responses: toolResponses('Updated cart.', TOOLS.applyPromotion),
     }),
     async (c) => {
       const { cart_uuid } = c.req.valid('param')
@@ -74,7 +74,7 @@ export function registerPromotionRoutes(app: OpenAPIHono<AppEnv>): void {
         params: z.object({ cart_uuid: CartUuidParam, promo_code: z.string().min(1) }),
         query: z.object(adFields),
       },
-      responses: toolResponses('Updated cart.'),
+      responses: toolResponses('Updated cart.', TOOLS.removePromotion),
     }),
     async (c) => {
       const { cart_uuid, promo_code } = c.req.valid('param')

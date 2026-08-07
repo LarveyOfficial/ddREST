@@ -23,7 +23,7 @@ export function registerOrderRoutes(app: OpenAPIHono<AppEnv>): void {
           limit: z.coerce.number().int().min(1).max(100).default(10),
         }),
       },
-      responses: toolResponses('Order history.'),
+      responses: toolResponses('Order history.', TOOLS.getOrderHistory),
     }),
     async (c) => {
       const { days, limit } = c.req.valid('query')
@@ -40,7 +40,7 @@ export function registerOrderRoutes(app: OpenAPIHono<AppEnv>): void {
       summary: 'Get an order receipt',
       security,
       request: { params: z.object({ order_uuid: OrderUuidParam }) },
-      responses: toolResponses('Receipt. Monetary values are in cents.'),
+      responses: toolResponses('Receipt. Monetary values are in cents.', TOOLS.getOrderReceipt),
     }),
     async (c) => {
       const { order_uuid } = c.req.valid('param')
@@ -57,7 +57,7 @@ export function registerOrderRoutes(app: OpenAPIHono<AppEnv>): void {
       summary: 'Get live order status',
       security,
       request: { params: z.object({ order_uuid: OrderUuidParam }) },
-      responses: toolResponses('Order status.'),
+      responses: toolResponses('Order status.', TOOLS.getOrderStatus),
     }),
     async (c) => {
       const { order_uuid } = c.req.valid('param')
@@ -74,7 +74,7 @@ export function registerOrderRoutes(app: OpenAPIHono<AppEnv>): void {
       summary: 'Recreate a past order as a new cart',
       security,
       request: { params: z.object({ order_uuid: OrderUuidParam }) },
-      responses: toolResponses('The new cart.'),
+      responses: toolResponses('The new cart.', TOOLS.reorder),
     }),
     async (c) => {
       const { order_uuid } = c.req.valid('param')
@@ -114,7 +114,7 @@ export function registerOrderRoutes(app: OpenAPIHono<AppEnv>): void {
           },
         },
       },
-      responses: toolResponses('Order quote.'),
+      responses: toolResponses('Order quote.', TOOLS.previewOrder),
     }),
     async (c) => {
       const { cart_uuid } = c.req.valid('param')
@@ -160,7 +160,7 @@ export function registerOrderRoutes(app: OpenAPIHono<AppEnv>): void {
           },
         },
       },
-      responses: toolResponses('Submitted order.'),
+      responses: toolResponses('Submitted order.', TOOLS.submitOrder),
     }),
     async (c) => {
       const { cart_uuid } = c.req.valid('param')
@@ -178,7 +178,7 @@ export function registerOrderRoutes(app: OpenAPIHono<AppEnv>): void {
       description: 'Hands checkout to the DoorDash web flow instead of submitting through the API.',
       security,
       request: { params: z.object({ cart_uuid: CartUuidParam }) },
-      responses: toolResponses('Checkout URL.'),
+      responses: toolResponses('Checkout URL.', TOOLS.getCheckoutUrl),
     }),
     async (c) => {
       const { cart_uuid } = c.req.valid('param')

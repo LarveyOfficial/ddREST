@@ -10,6 +10,7 @@ import { SESSION_PREFIX } from './session/store.ts'
 import { SessionManager } from './session/manager.ts'
 import { PairingManager } from './pairing/manager.ts'
 import type { AppEnv } from './types.ts'
+import { SHARED_RESULT_DEFS } from './schemas/results.generated.ts'
 import { registerAuthRoutes } from './routes/auth.ts'
 import { registerPairingRoutes } from './routes/pair.ts'
 import { registerDocsRoutes } from './routes/docs.ts'
@@ -83,6 +84,12 @@ export function createApp(cfg: Config): OpenAPIHono<AppEnv> {
   registerPromotionRoutes(app)
   registerOrderRoutes(app)
   registerAccountRoutes(app)
+
+  // Object shapes shared between tool results, hoisted out of each tool's
+  // `$defs` so the `$ref`s in them resolve inside the OpenAPI document.
+  for (const [name, schema] of Object.entries(SHARED_RESULT_DEFS)) {
+    app.openAPIRegistry.registerComponent('schemas', name, schema as Record<string, unknown>)
+  }
 
   app.openAPIRegistry.registerComponent('securitySchemes', 'sessionCookie', {
     type: 'apiKey',

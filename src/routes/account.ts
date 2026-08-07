@@ -16,7 +16,7 @@ export function registerAccountRoutes(app: OpenAPIHono<AppEnv>): void {
       tags,
       summary: 'List saved delivery addresses',
       security,
-      responses: toolResponses('Saved addresses.'),
+      responses: toolResponses('Saved addresses.', TOOLS.listDeliveryAddresses),
     }),
     async (c) => c.json(await callTool(c, TOOLS.listDeliveryAddresses, {})),
   )
@@ -43,7 +43,7 @@ export function registerAccountRoutes(app: OpenAPIHono<AppEnv>): void {
           },
         },
       },
-      responses: toolResponses('Active address updated.'),
+      responses: toolResponses('Active address updated.', TOOLS.setDeliveryAddress),
     }),
     async (c) => c.json(await callTool(c, TOOLS.setDeliveryAddress, c.req.valid('json'))),
   )
@@ -56,7 +56,7 @@ export function registerAccountRoutes(app: OpenAPIHono<AppEnv>): void {
       tags,
       summary: 'List saved payment methods',
       security,
-      responses: toolResponses('Saved payment methods (as DoorDash returns them — no full card numbers).'),
+      responses: toolResponses('Saved payment methods (as DoorDash returns them — no full card numbers).', TOOLS.getPaymentInfo),
     }),
     async (c) => c.json(await callTool(c, TOOLS.getPaymentInfo, {})),
   )

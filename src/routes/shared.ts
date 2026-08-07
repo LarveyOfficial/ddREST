@@ -7,6 +7,7 @@ import { z } from '@hono/zod-openapi'
 import type { Context } from 'hono'
 import type { AppEnv } from '../types.ts'
 import { intentFor, type ToolName } from '../mcp/tools.ts'
+import { TOOL_RESULT_SCHEMAS } from '../schemas/results.generated.ts'
 
 /**
  * Tool responses are passed through unvalidated.
@@ -44,14 +45,29 @@ export const commonErrorResponses = {
   504: errorResponse('The DoorDash MCP gateway timed out.'),
 } as const
 
-export const okResponse = (description: string) => ({
+/**
+ * The documented result shape for a tool, or the generic pass-through when the
+ * gateway describes its output as a bare object.
+ *
+ * The schema is attached as metadata rather than expressed in Zod: it comes
+ * verbatim from the gateway (see src/schemas/results.generated.ts) and is for
+ * documentation only. Nothing validates a response against it, so a new field
+ * from DoorDash still passes through untouched.
+ */
+function resultSchemaFor(tool: ToolName) {
+  const described = TOOL_RESULT_SCHEMAS[tool]
+  if (!described) return ToolResultSchema
+  return z.looseObject({}).meta({ id: described.component, ...described.schema })
+}
+
+export const okResponse = (description: string, tool?: ToolName) => ({
   description,
-  content: { 'application/json': { schema: ToolResultSchema } },
+  content: { 'application/json': { schema: tool ? resultSchemaFor(tool) : ToolResultSchema } },
 })
 
 /** Standard 200 + error set for a tool-backed route. */
-export const toolResponses = (description: string) => ({
-  200: okResponse(description),
+export const toolResponses = (description: string, tool?: ToolName) => ({
+  200: okResponse(description, tool),
   ...commonErrorResponses,
 })
 

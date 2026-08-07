@@ -531,11 +531,18 @@ The auth and pairing routes are not tool-backed:
 
 ### About `intent`
 
-Every MCP tool requires an `intent` string, and per dd-cli's own help text
+Every MCP tool accepts an `intent` string, and per dd-cli's own help text
 DoorDash "may review this data for research and product-improvement purposes".
 This API generates it server-side, per operation, and forwards no end-user text.
 Callers cannot set or influence it. Every string sent is in one auditable place:
 [`src/mcp/tools.ts`](src/mcp/tools.ts).
+
+It is **optional** on all 26 tools, which the gateway's own schemas confirm —
+they describe it as "logged for product analytics and monitoring only — has no
+effect on the results returned". ddREST sends it anyway, because a generated
+one-line description of the operation is a smaller disclosure than an empty
+field is a benefit, and it keeps behaviour close to dd-cli's. Nothing would
+break if it were dropped.
 
 ### Errors
 
@@ -553,9 +560,32 @@ authenticated fine but is not an approved consumer-MCP tester.
 
 ### Response bodies
 
-Tool responses are passed through unvalidated. DoorDash does not publish their
-shapes, so validating against a guess would reject real payloads the moment one
-carried a field we had not anticipated.
+Tool responses are passed through unvalidated, but they are **documented**. The
+gateway advertises an `outputSchema` per tool alongside its inputs, so `/docs`
+shows the real response shape for the 20 of 26 tools that describe one. The
+other six declare a bare `{additionalProperties: true}` and fall back to the
+generic pass-through result:
+
+```
+doordash_get_restaurant_menu     internal_get_item_details
+doordash_list_active_carts       doordash_get_checkout_url
+doordash_list_delivery_addresses doordash_get_payment_info
+```
+
+Documented is not enforced. Nothing validates a response against its schema —
+DoorDash can add a field at any time and it must still pass through untouched.
+
+The schemas are committed rather than fetched at boot, so the API document is
+identical for everyone, needs no account, and renders `/docs` without a network
+call. Refresh them after a DoorDash change:
+
+```bash
+bun run list-tools --dump && bun run gen-schemas
+```
+
+That rewrites [`src/schemas/results.generated.ts`](src/schemas/results.generated.ts),
+hoisting each tool's `$defs` into shared components so their `$ref`s resolve
+inside the OpenAPI document.
 
 ## Testing
 

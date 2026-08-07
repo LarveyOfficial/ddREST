@@ -47,7 +47,7 @@ export function registerCartRoutes(app: OpenAPIHono<AppEnv>): void {
           max_carts: z.coerce.number().int().min(1).max(40).default(40),
         }),
       },
-      responses: toolResponses('Active carts.'),
+      responses: toolResponses('Active carts.', TOOLS.listActiveCarts),
     }),
     async (c) => {
       const { store_id, max_carts } = c.req.valid('query')
@@ -65,7 +65,7 @@ export function registerCartRoutes(app: OpenAPIHono<AppEnv>): void {
       description: 'Pass `cart_uuid` in the body to target a specific cart, or omit it to let DoorDash choose.',
       security,
       request: { body: { required: true, content: { 'application/json': { schema: AddItemsBodyWithCart } } } },
-      responses: toolResponses('Updated cart.'),
+      responses: toolResponses('Updated cart.', TOOLS.addToCart),
     }),
     async (c) => c.json(await callTool(c, TOOLS.addToCart, c.req.valid('json'))),
   )
@@ -82,7 +82,7 @@ export function registerCartRoutes(app: OpenAPIHono<AppEnv>): void {
         params: z.object({ cart_uuid: CartUuidParam }),
         body: { required: true, content: { 'application/json': { schema: AddItemsBody } } },
       },
-      responses: toolResponses('Updated cart.'),
+      responses: toolResponses('Updated cart.', TOOLS.addToCart),
     }),
     async (c) => {
       const { cart_uuid } = c.req.valid('param')
@@ -99,7 +99,7 @@ export function registerCartRoutes(app: OpenAPIHono<AppEnv>): void {
       summary: 'Show a cart',
       security,
       request: { params: z.object({ cart_uuid: CartUuidParam }) },
-      responses: toolResponses('Cart contents.'),
+      responses: toolResponses('Cart contents.', TOOLS.getCart),
     }),
     async (c) => {
       const { cart_uuid } = c.req.valid('param')
@@ -116,7 +116,7 @@ export function registerCartRoutes(app: OpenAPIHono<AppEnv>): void {
       summary: 'Remove one item from a cart',
       security,
       request: { params: z.object({ cart_uuid: CartUuidParam, cart_item_id: z.string().min(1) }) },
-      responses: toolResponses('Updated cart.'),
+      responses: toolResponses('Updated cart.', TOOLS.removeCartItem),
     }),
     async (c) => {
       const { cart_uuid, cart_item_id } = c.req.valid('param')
@@ -133,7 +133,7 @@ export function registerCartRoutes(app: OpenAPIHono<AppEnv>): void {
       summary: 'Delete a cart',
       security,
       request: { params: z.object({ cart_uuid: CartUuidParam }) },
-      responses: toolResponses('Cart cleared.'),
+      responses: toolResponses('Cart cleared.', TOOLS.clearCart),
     }),
     async (c) => {
       const { cart_uuid } = c.req.valid('param')
@@ -166,7 +166,7 @@ export function registerCartRoutes(app: OpenAPIHono<AppEnv>): void {
           },
         },
       },
-      responses: toolResponses('Product list.'),
+      responses: toolResponses('Product list.', TOOLS.createProductList),
     }),
     async (c) => c.json(await callTool(c, TOOLS.createProductList, c.req.valid('json'))),
   )

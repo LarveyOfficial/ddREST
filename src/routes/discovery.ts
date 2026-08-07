@@ -33,7 +33,7 @@ export function registerDiscoveryRoutes(app: OpenAPIHono<AppEnv>): void {
           limit: z.coerce.number().int().min(1).max(50).default(5),
         }),
       },
-      responses: toolResponses('Matching restaurants.'),
+      responses: toolResponses('Matching restaurants.', TOOLS.findRestaurants),
     }),
     async (c) => {
       const cfg = c.get('config')
@@ -74,7 +74,7 @@ export function registerDiscoveryRoutes(app: OpenAPIHono<AppEnv>): void {
           address_id: AddressIdQuery.optional(),
         }),
       },
-      responses: toolResponses('Nearby stores.'),
+      responses: toolResponses('Nearby stores.', TOOLS.findNearbyStores),
     }),
     async (c) => {
       const { vertical_scope, limit, ...location } = c.req.valid('query')
@@ -101,7 +101,7 @@ export function registerDiscoveryRoutes(app: OpenAPIHono<AppEnv>): void {
       summary: 'Get store details',
       security,
       request: { params: z.object({ store_id: StoreIdParam }) },
-      responses: toolResponses('Store details.'),
+      responses: toolResponses('Store details.', TOOLS.getStoreInfo),
     }),
     async (c) => {
       const { store_id } = c.req.valid('param')
@@ -118,7 +118,7 @@ export function registerDiscoveryRoutes(app: OpenAPIHono<AppEnv>): void {
       summary: 'Get a restaurant menu',
       security,
       request: { params: z.object({ store_id: StoreIdParam }) },
-      responses: toolResponses('Menu id and items.'),
+      responses: toolResponses('Menu id and items.', TOOLS.getRestaurantMenu),
     }),
     async (c) => {
       const { store_id } = c.req.valid('param')
@@ -143,7 +143,7 @@ export function registerDiscoveryRoutes(app: OpenAPIHono<AppEnv>): void {
             .meta({ description: 'Item name to look for. Repeatable.' }),
         }),
       },
-      responses: toolResponses('Matching items in the store.'),
+      responses: toolResponses('Matching items in the store.', TOOLS.findItemsInStore),
     }),
     async (c) => {
       const { store_id } = c.req.valid('param')
@@ -162,7 +162,7 @@ export function registerDiscoveryRoutes(app: OpenAPIHono<AppEnv>): void {
       summary: 'Get details for a store item',
       security,
       request: { params: z.object({ store_id: StoreIdParam, item_id: z.string().min(1) }) },
-      responses: toolResponses('Item details.'),
+      responses: toolResponses('Item details.', TOOLS.getItemDetails),
     }),
     async (c) => {
       const { store_id, item_id } = c.req.valid('param')
@@ -182,7 +182,7 @@ export function registerDiscoveryRoutes(app: OpenAPIHono<AppEnv>): void {
       request: {
         params: z.object({ store_id: StoreIdParam, menu_id: z.string().min(1), item_id: z.string().min(1) }),
       },
-      responses: toolResponses('Menu item details.'),
+      responses: toolResponses('Menu item details.', TOOLS.getFoodItem),
     }),
     async (c) => {
       const { store_id, menu_id, item_id } = c.req.valid('param')

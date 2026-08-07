@@ -13,6 +13,7 @@
     "inspect-token": "bun scripts/inspect-token.ts",
     "probe-refresh": "bun scripts/probe-refresh-lifetime.ts",
     "list-tools": "bun scripts/list-tools.ts",
+    "gen-schemas": "bun scripts/gen-result-schemas.ts",
     "mock": "bun mock/upstream.ts"
   },
   "dependencies": {
