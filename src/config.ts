@@ -101,6 +101,16 @@ export interface Config {
   orderStreamIntervalSeconds: number
   /** Hard cap on how long one SSE stream stays open. */
   orderStreamMaxSeconds: number
+
+  /**
+   * Base for an order's live tracking page, joined with the order id.
+   *
+   * DoorDash exposes no tracking tool — the map, the Dasher's progress and the
+   * ETA all live on this web page. The URL is deterministic from the order id,
+   * so we can hand it out; it is configurable only so a change of scheme on
+   * DoorDash's side does not need a release.
+   */
+  orderTrackingBaseUrl: string
 }
 
 export class ConfigError extends Error {}
@@ -374,5 +384,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
 
     orderStreamIntervalSeconds,
     orderStreamMaxSeconds,
+
+    orderTrackingBaseUrl: str(env, 'ORDER_TRACKING_BASE_URL', 'https://www.doordash.com/orders').replace(/\/+$/, ''),
   }
 }

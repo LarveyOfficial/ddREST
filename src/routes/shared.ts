@@ -110,3 +110,16 @@ export function compact(args: Record<string, unknown>): Record<string, unknown> 
 
 /** Either credential is accepted, so this is an OR of two schemes. */
 export const security: Record<string, string[]>[] = [{ sessionCookie: [] }, { sessionBearer: [] }]
+
+/**
+ * The live tracking page for an order.
+ *
+ * DoorDash exposes no tracking tool — the map, the Dasher's progress and the
+ * ETA all live on this web page, and the API's own order status stops at "the
+ * order went through". The page URL is deterministic from the order id, so this
+ * is the one thing we can add. Configurable via ORDER_TRACKING_BASE_URL only so
+ * a change of scheme on DoorDash's side needs no release.
+ */
+export function trackingUrl(c: Context<AppEnv>, orderUuid: string): string {
+  return `${c.get('config').orderTrackingBaseUrl}/${encodeURIComponent(orderUuid)}`
+}

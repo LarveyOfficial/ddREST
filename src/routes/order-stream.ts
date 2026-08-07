@@ -17,18 +17,25 @@ import { streamSSE } from 'hono/streaming'
 import { ApiError } from '../errors.ts'
 import type { AppEnv } from '../types.ts'
 import { TOOLS } from '../mcp/tools.ts'
-import { callTool, security } from './shared.ts'
+import { callTool, security, trackingUrl } from './shared.ts'
 import { resolveOrderUuid } from './resolve.ts'
 import { OrderUuidParam } from '../schemas/common.ts'
 
 /**
- * Statuses after which nothing further happens.
+ * Statuses that mean "keep polling"; everything else is terminal.
  *
- * Matched case-insensitively against whatever DoorDash puts in `status`, which
- * is not a documented enum — an unrecognised status simply keeps the stream
- * open until the time cap, which is the safe direction to be wrong in.
+ * internal_get_order_status is a *post-submit processing* poll, not a delivery
+ * tracker. Its documented values are `pending` (still clearing payment/fraud),
+ * `successful`, `action_required`, `failed` and `not_found`. Only `pending` —
+ * and briefly `not_found`, which is transient right after submit — is worth
+ * polling on; `successful`/`action_required`/`failed` are all end states.
+ *
+ * Modelled as the continue-set rather than a terminal-set on purpose: the tool
+ * reports whether the order went *through*, and DoorDash exposes no further
+ * "preparing / picked up / delivered" progression here, so waiting for those
+ * words (as an earlier version did) means never stopping.
  */
-const TERMINAL_STATUSES = new Set(['delivered', 'completed', 'cancelled', 'canceled', 'picked_up_by_consumer'])
+const STILL_PROCESSING = new Set(['pending', 'not_found'])
 
 export function registerOrderStreamRoute(app: OpenAPIHono<AppEnv>): void {
   app.openapi(
@@ -36,15 +43,22 @@ export function registerOrderStreamRoute(app: OpenAPIHono<AppEnv>): void {
       method: 'get',
       path: '/v1/orders/{order_uuid}/status/stream',
       tags: ['Orders'],
-      summary: 'Watch an order’s status (Server-Sent Events)',
+      summary: 'Watch an order clear processing (Server-Sent Events)',
       description:
         'The same data as `GET /v1/orders/{order_uuid}/status`, pushed as it changes, so a client waits instead ' +
         'of polling.\n\n' +
-        'Events are `status` (the full status payload, on the first poll and on every change afterwards), ' +
-        '`error` (a poll failed; the stream continues), and `end` (why it stopped: `terminal`, `timeout` or ' +
-        '`client`). Each `status` event carries an incrementing `id`.\n\n' +
+        '**This tracks post-submit *processing*, not delivery.** DoorDash’s status here goes `pending` → ' +
+        '`successful` (payment and fraud cleared, order placed) — or `action_required` / `failed` — and stops ' +
+        'there. It does **not** report preparing / picked-up / delivered; DoorDash exposes no such progression ' +
+        'through this API. So the stream ends as soon as the order is no longer `pending` — usually after a ' +
+        'poll or two — rather than following the delivery. For that, open the `doordashTrackingUrl` on every ' +
+        'event.\n\n' +
+        'Events are `status` (the full payload plus `doordashTrackingUrl`, on the first poll and on every change ' +
+        'afterwards), `error` (a poll failed; the stream continues), and `end` (why it stopped: `terminal`, ' +
+        '`timeout` or `client`, also carrying `doordashTrackingUrl`). Each `status` event carries an ' +
+        'incrementing `id`.\n\n' +
         'The poll interval and the maximum stream lifetime are set by `ORDER_STREAM_INTERVAL_SECONDS` and ' +
-        '`ORDER_STREAM_MAX_SECONDS`. Reconnect if you still care once a stream ends on `timeout`.',
+        '`ORDER_STREAM_MAX_SECONDS`.',
       security,
       request: { params: z.object({ order_uuid: OrderUuidParam }) },
       responses: {
@@ -70,6 +84,9 @@ export function registerOrderStreamRoute(app: OpenAPIHono<AppEnv>): void {
 
       const intervalMs = cfg.orderStreamIntervalSeconds * 1000
       const deadline = Date.now() + cfg.orderStreamMaxSeconds * 1000
+      // Added to every event: the API's status stops at "placed", so the live
+      // page is where the caller goes next.
+      const doordashTrackingUrl = trackingUrl(c, orderUuid)
 
       return streamSSE(c, async (stream) => {
         let lastStatus: string | undefined
@@ -104,9 +121,16 @@ export function registerOrderStreamRoute(app: OpenAPIHono<AppEnv>): void {
             // learns the current state without waiting for a change.
             if (status !== lastStatus || lastStatus === undefined) {
               lastStatus = status
-              await stream.writeSSE({ event: 'status', id: String(++id), data: JSON.stringify(payload) })
+              await stream.writeSSE({
+                event: 'status',
+                id: String(++id),
+                data: JSON.stringify({ ...payload, doordashTrackingUrl }),
+              })
             }
-            if (status !== undefined && TERMINAL_STATUSES.has(status.toLowerCase())) {
+            // A concrete status that is not a processing one is an end state.
+            // An empty/absent status is treated as terminal too rather than
+            // looping to the time cap on a response that carries nothing.
+            if (status === undefined || !STILL_PROCESSING.has(status.toLowerCase())) {
               ended = 'terminal'
               break
             }
@@ -119,7 +143,7 @@ export function registerOrderStreamRoute(app: OpenAPIHono<AppEnv>): void {
         if (aborted) return
         await stream.writeSSE({
           event: 'end',
-          data: JSON.stringify({ reason: ended, order_uuid: orderUuid, last_status: lastStatus }),
+          data: JSON.stringify({ reason: ended, order_uuid: orderUuid, last_status: lastStatus, doordashTrackingUrl }),
         })
       })
     },

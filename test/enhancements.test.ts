@@ -522,6 +522,44 @@ describe('order status stream', () => {
   })
 })
 
+describe('order tracking url', () => {
+  test('order status carries a doordashTrackingUrl to the live page', async () => {
+    h.mock.setToolResult(() => ({ success: true, status: 'successful' }))
+    const res = await h.request('/v1/orders/ee3b1398/status', { headers: auth })
+
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { status: string; doordashTrackingUrl: string }
+    expect(body.status).toBe('successful')
+    expect(body.doordashTrackingUrl).toBe('https://www.doordash.com/orders/ee3b1398')
+  })
+
+  test('the base url is configurable', async () => {
+    const custom = makeHarness({ ORDER_TRACKING_BASE_URL: 'https://doordash.com/orders/' })
+    try {
+      const { sessionToken } = await login(custom)
+      custom.mock.setToolResult(() => ({ success: true, status: 'successful' }))
+      const res = await custom.request('/v1/orders/abc/status', { headers: bearer(sessionToken) })
+      // Trailing slash on the base is trimmed, not doubled.
+      expect(((await res.json()) as { doordashTrackingUrl: string }).doordashTrackingUrl).toBe(
+        'https://doordash.com/orders/abc',
+      )
+    } finally {
+      custom.stop()
+    }
+  })
+
+  test('the stream stops once the order is no longer pending, and points at the page', async () => {
+    h.mock.setToolResult(() => ({ success: true, status: 'successful' }))
+    const res = await h.request('/v1/orders/ee3b1398/status/stream', { headers: auth })
+    const body = await res.text()
+
+    // successful is terminal for this tool, so the stream ends rather than
+    // polling to the cap.
+    expect(body).toContain('"reason":"terminal"')
+    expect(body).toContain('https://www.doordash.com/orders/ee3b1398')
+  })
+})
+
 describe('Retry-After', () => {
   test('accompanies a pairing rate limit', async () => {
     const capped = makeHarness({ PAIRING_MAX_PENDING: '1' })

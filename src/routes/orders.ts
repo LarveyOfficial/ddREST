@@ -4,7 +4,7 @@ import { createRoute, z, type OpenAPIHono } from '@hono/zod-openapi'
 import { ApiError } from '../errors.ts'
 import type { AppEnv } from '../types.ts'
 import { TOOLS } from '../mcp/tools.ts'
-import { callTool, security, submitErrorResponses, toolResponses } from './shared.ts'
+import { callTool, security, submitErrorResponses, toolResponses, trackingUrl } from './shared.ts'
 import { resolveCartUuid, resolveOrderUuid } from './resolve.ts'
 import { fingerprint } from '../orders/idempotency.ts'
 import { registerOrderStreamRoute } from './order-stream.ts'
@@ -139,14 +139,24 @@ export function registerOrderRoutes(app: OpenAPIHono<AppEnv>): void {
       method: 'get',
       path: '/v1/orders/{order_uuid}/status',
       tags,
-      summary: 'Get live order status',
+      summary: 'Get an order’s processing status',
+      description:
+        'Reports only whether a submitted order **cleared processing**: `pending` → `successful`, or ' +
+        '`action_required` / `failed`. That is the whole of it — DoorDash exposes **no** live delivery status ' +
+        'through the API, so this never advances to preparing, picked-up, en-route or delivered, and once an ' +
+        'order is `successful` polling it tells you nothing new.\n\n' +
+        'For live tracking — the map, the Dasher’s progress, the ETA — open the `doordashTrackingUrl` added to ' +
+        'the response body. It points at the DoorDash web page, which is the only place that information lives.',
       security,
       request: { params: z.object({ order_uuid: OrderUuidParam }) },
-      responses: toolResponses('Order status.', TOOLS.getOrderStatus),
+      responses: toolResponses('Order processing status, plus a `doordashTrackingUrl` to the live page.', TOOLS.getOrderStatus),
     }),
     async (c) => {
       const order_uuid = await resolveOrderUuid(c, c.req.valid('param').order_uuid)
-      return c.json(await callTool(c, TOOLS.getOrderStatus, { order_uuid }))
+      const status = await callTool(c, TOOLS.getOrderStatus, { order_uuid })
+      // The one thing this API can add once the order is placed: where to watch
+      // it. camelCase marks it as ours, not part of DoorDash's payload.
+      return c.json({ ...status, doordashTrackingUrl: trackingUrl(c, order_uuid) })
     },
   )
 
