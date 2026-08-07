@@ -24,8 +24,11 @@ jobs:
       - run: bun run typecheck
       - run: bun test
 
+  # Only builds and publishes on a push to main or a tag. Pull requests run the
+  # test job above and nothing else — no image is built or pushed for them.
   build:
     needs: test
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -42,10 +45,7 @@ jobs:
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
 
-      # Pull requests build to prove the Dockerfile still works, but publish
-      # nothing — GITHUB_TOKEN has no package write access from a fork anyway.
       - name: Log in to ${{ env.REGISTRY }}
-        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -67,7 +67,7 @@ jobs:
         with:
           context: .
           platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha

@@ -37,7 +37,11 @@ import { resolveLocation } from './location.ts'
  */
 export function storeIdAsInt(storeId: string): number | string {
   const n = Number(storeId)
-  return Number.isInteger(n) ? n : storeId
+  // Require an exact round-trip: an id past 2^53 parses to a finite integer that
+  // has already been rounded, so `String(n) === storeId` is what stops us
+  // sending a silently-wrong number. Anything that fails to round-trip stays a
+  // string for the gateway to judge.
+  return Number.isInteger(n) && String(n) === storeId ? n : storeId
 }
 
 /** Most recently touched, whichever resource it is. */
@@ -80,9 +84,15 @@ export async function resolveCartUuid(c: Context<AppEnv>, cartUuid: string): Pro
 
   if (!wantsLatest && storeFilter === undefined) return cartUuid
 
+  // `store:` with nothing after it is a mistake, not "every store"; refuse it the
+  // same way `name:` refuses an empty name rather than filtering on "".
+  if (storeFilter === '') {
+    throw ApiError.badRequest('`store:` needs a store id after it, e.g. `store:327011`.')
+  }
+
   const result = await callTool(c, TOOLS.listActiveCarts, {
     max_carts: 40,
-    store_id: storeFilter === '' ? undefined : storeFilter,
+    store_id: storeFilter,
   })
   const carts = collectCarts(result)
 
@@ -111,8 +121,9 @@ export async function resolveCartUuid(c: Context<AppEnv>, cartUuid: string): Pro
 /**
  * Active carts as a flat list, tolerant of where they sit in the payload.
  *
- * `list_active_carts` spells the key `cart_uuid` while `get_cart` spells it
- * `id`, so both are accepted.
+ * `list_active_carts` spells the key `cart_uuid`; `cart_id` is accepted as a
+ * fallback alias. The cart object's own `id` is deliberately not treated as a
+ * uuid — walkObjects would then mistake every nested object's `id` for a cart.
  */
 function collectCarts(result: unknown): CartSummary[] {
   const found = new Map<string, CartSummary>()
@@ -124,7 +135,7 @@ function collectCarts(result: unknown): CartSummary[] {
       ...pickString(obj, 'store_id'),
       ...pickString(obj, 'store_name'),
       ...pickNumber(obj, 'items_count'),
-      ...pickNumber(obj, 'updated_at'),
+      ...pickTimestamp(obj, 'updated_at'),
     })
   }
   return [...found.values()]
@@ -318,4 +329,22 @@ function pickString(obj: Record<string, unknown>, key: string): Record<string, s
 function pickNumber(obj: Record<string, unknown>, key: string): Record<string, number> {
   const value = obj[key]
   return typeof value === 'number' && Number.isFinite(value) ? { [key]: value } : {}
+}
+
+/**
+ * A sortable timestamp, whether the gateway sends a number or an ISO string.
+ *
+ * `updated_at` is an integer today, but "latest" hangs on this comparison — if
+ * DoorDash ever switched to a date string, a number-only pick would drop every
+ * value to undefined and make all carts sort equal, so `latest` would pick an
+ * arbitrary one. Parsing the string form keeps the ordering meaningful.
+ */
+function pickTimestamp(obj: Record<string, unknown>, key: string): Record<string, number> {
+  const value = obj[key]
+  if (typeof value === 'number' && Number.isFinite(value)) return { [key]: value }
+  if (typeof value === 'string') {
+    const at = Date.parse(value)
+    if (!Number.isNaN(at)) return { [key]: at }
+  }
+  return {}
 }
