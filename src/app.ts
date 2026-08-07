@@ -110,7 +110,7 @@ export function createApp(cfg: Config): OpenAPIHono<AppEnv> {
   // Everything below the auth routes needs a session. Registered as route-level
   // middleware rather than a blanket app.use so the OpenAPI document reflects it.
   const guarded = sessionMiddleware()
-  for (const path of ['/v1/me', '/v1/restaurants', '/v1/nearby-stores', '/v1/offers', '/v1/stores/*', '/v1/carts', '/v1/carts/*', '/v1/orders', '/v1/orders/*', '/v1/addresses', '/v1/addresses/*', '/v1/payment-methods', '/v1/product-lists']) {
+  for (const path of ['/v1/restaurants', '/v1/nearby-stores', '/v1/offers', '/v1/stores/*', '/v1/carts', '/v1/carts/*', '/v1/orders', '/v1/orders/*', '/v1/addresses', '/v1/addresses/*', '/v1/payment-methods', '/v1/product-lists']) {
     app.use(path, guarded)
   }
 

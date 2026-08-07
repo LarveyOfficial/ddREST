@@ -28,20 +28,6 @@ const AddressLinkIdParam = z.string().min(1).meta({
 })
 
 export function registerAccountRoutes(app: OpenAPIHono<AppEnv>): void {
-  // doordash_get_user_info
-  app.openapi(
-    createRoute({
-      method: 'get',
-      path: '/v1/me',
-      tags,
-      summary: 'Who this session belongs to',
-      description: 'The DoorDash account the current session authenticates as.',
-      security,
-      responses: toolResponses('Account details.', TOOLS.getUserInfo),
-    }),
-    async (c) => c.json(await callTool(c, TOOLS.getUserInfo, {})),
-  )
-
   // doordash_address_autocomplete
   app.openapi(
     createRoute({

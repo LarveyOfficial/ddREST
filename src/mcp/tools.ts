@@ -1,5 +1,5 @@
 /**
- * The 38 MCP tool names, and the server-generated `intent` each one is called
+ * The 37 MCP tool names, and the server-generated `intent` each one is called
  * with.
  *
  * Most tools accept an `intent` string, and per the CLI's own help text
@@ -9,7 +9,7 @@
  * user text is attached. Keeping the strings here — rather than inline at each
  * route — makes it possible to audit in one place exactly what we tell DoorDash.
  *
- * Twelve tools declare no `intent` in their input schema at all (see SUMMARIES).
+ * Eleven tools declare no `intent` in their input schema at all (see SUMMARIES).
  * They get no intent rather than one the gateway never asked for — sending an
  * undeclared argument is at best ignored and at worst rejected, and it is
  * disclosure with no upside either way.
@@ -59,7 +59,6 @@ export const TOOLS = {
   setAddressLabel: 'internal_set_address_label',
   addressAutocomplete: 'doordash_address_autocomplete',
   selectAddress: 'doordash_select_address',
-  getUserInfo: 'doordash_get_user_info',
 } as const
 
 export type ToolName = (typeof TOOLS)[keyof typeof TOOLS]
@@ -67,7 +66,7 @@ export type ToolName = (typeof TOOLS)[keyof typeof TOOLS]
 /**
  * One summary per tool whose input schema declares `intent`.
  *
- * Deliberately partial: the eight tools missing below do not advertise the
+ * Deliberately partial: the eleven tools missing below do not advertise the
  * argument, so nothing is sent for them. Check with `bun run list-tools` before
  * adding an entry — a tool absent from this map is a decision, not an omission.
  */
@@ -107,7 +106,7 @@ const SUMMARIES: Partial<Record<ToolName, string>> = {
   [TOOLS.setDeliveryAddress]: 'Set the delivery address the user selected.',
   [TOOLS.getPaymentInfo]: 'Show the user their saved payment methods.',
   // setDeliveryInstructions, setAddressLabel, micCarousel, addressAutocomplete,
-  // selectAddress, getUserInfo: no `intent` in their schemas.
+  // selectAddress: no `intent` in their schemas.
 }
 
 /**

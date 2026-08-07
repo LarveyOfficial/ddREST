@@ -61,7 +61,6 @@ const TOOLS_WITHOUT_INTENT = new Set<string>([
   TOOLS.micCarousel,
   TOOLS.addressAutocomplete,
   TOOLS.selectAddress,
-  TOOLS.getUserInfo,
 ])
 
 const CASES: Case[] = [
@@ -384,13 +383,6 @@ const CASES: Case[] = [
     expect: { address_link_id: '6065321966', label: 'home' },
   },
   {
-    name: 'who am i',
-    method: 'GET',
-    path: '/v1/me',
-    tool: TOOLS.getUserInfo,
-    required: [],
-  },
-  {
     name: 'address autocomplete',
     method: 'GET',
     path: '/v1/addresses/search?query=21+E+Bellevue&country=us&latitude=41.9&longitude=-87.6',
@@ -461,7 +453,7 @@ describe('tool routes', () => {
   test('covers every tool', () => {
     const covered = new Set(CASES.map((c) => c.tool))
     const all = new Set<string>(Object.values(TOOLS))
-    expect(all.size).toBe(38)
+    expect(all.size).toBe(37)
     expect([...all].filter((t) => !covered.has(t))).toEqual([])
   })
 })
@@ -575,9 +567,9 @@ describe('openapi document', () => {
     const operations = Object.values(doc.paths).flatMap((methods: Record<string, unknown>) =>
       Object.keys(methods).filter((m) => ['get', 'post', 'put', 'patch', 'delete'].includes(m)),
     )
-    // 38 tools + the extra add-to-cart entry point + the status stream
+    // 37 tools + the extra add-to-cart entry point + the status stream
     // + 4 auth routes + 5 pairing routes.
-    expect(operations).toHaveLength(49)
+    expect(operations).toHaveLength(48)
     expect(doc.paths['/v1/auth/login/complete']).toBeDefined()
 
     // Pairing is additive: the original login flow must still be documented.
