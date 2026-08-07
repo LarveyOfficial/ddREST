@@ -23,11 +23,13 @@
  * field at any time and a response carrying one must still pass through
  * untouched, so nothing here is enforced at runtime.
  *
- * advertised only:        11
+ * advertised only:        17
  * advertised + observed:  9
  * observed only:          5
- * still undocumented:     1
+ * still undocumented:     3
  *   - internal_get_item_details
+ *   - internal_set_delivery_instructions
+ *   - internal_set_address_label
  */
 
 /** Shared object definitions, hoisted out of each tool's `$defs`. */
@@ -609,6 +611,270 @@ export const SHARED_RESULT_DEFS: Record<string, unknown> = {
       "item_name"
     ],
     "title": "ItemSearchResult",
+    "type": "object"
+  },
+  "DDNearbyOffer": {
+    "description": "Compact cross-store offer projected from feed-service /v3/feed/offers.\n\nFields map 1:1 to what `FeedServiceClient._project_nearby_offer` emits —\nsee that function for the exact facet-tree source for each field. The\nshape is designed so downstream consumers (Rx `generate_display`) can\nrender the existing store card without a second fetch.",
+    "properties": {
+      "store_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Store Id"
+      },
+      "store_name": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Store Name"
+      },
+      "offer_title": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Offer Title"
+      },
+      "offer_description": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Offer Description"
+      },
+      "image_url": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Image Url"
+      },
+      "eta_display": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Eta Display"
+      },
+      "delivery_fee_display": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Delivery Fee Display"
+      },
+      "rating": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Rating"
+      },
+      "num_ratings_display": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Num Ratings Display"
+      },
+      "num_ratings": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Num Ratings"
+      },
+      "is_currently_available": {
+        "anyOf": [
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Is Currently Available"
+      },
+      "is_dashpass": {
+        "default": false,
+        "title": "Is Dashpass",
+        "type": "boolean"
+      },
+      "is_sponsored": {
+        "anyOf": [
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Is Sponsored"
+      },
+      "store_url": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Store Url"
+      }
+    },
+    "title": "NearbyOffer",
+    "type": "object"
+  },
+  "DDStoreDeal": {
+    "description": "Projected fields for a single deal item, LLM-friendly.",
+    "properties": {
+      "item_name": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Item Name"
+      },
+      "price_display": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Price Display"
+      },
+      "per_unit_price": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Per Unit Price"
+      },
+      "size_description": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Size Description"
+      },
+      "has_member_price": {
+        "default": false,
+        "title": "Has Member Price",
+        "type": "boolean"
+      },
+      "item_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Item Id"
+      },
+      "store_name": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Store Name"
+      },
+      "purchase_type": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Purchase Type"
+      }
+    },
+    "title": "StoreDeal",
     "type": "object"
   },
   "DDAvailableStore": {
@@ -1823,6 +2089,128 @@ export const TOOL_RESULT_SCHEMAS: Record<string, { component: string; schema: Re
     },
     "source": "advertised + observed"
   },
+  "internal_get_nearby_offers": {
+    "component": "DDGetNearbyOffersResult",
+    "schema": {
+      "description": "Response data for internal_get_nearby_offers.",
+      "properties": {
+        "success": {
+          "default": true,
+          "title": "Success",
+          "type": "boolean"
+        },
+        "total_offers": {
+          "default": 0,
+          "title": "Total Offers",
+          "type": "integer"
+        },
+        "offers": {
+          "default": [],
+          "items": {
+            "$ref": "#/components/schemas/DDNearbyOffer"
+          },
+          "title": "Offers",
+          "type": "array"
+        },
+        "next_cursor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Next Cursor"
+        },
+        "trace_id": {
+          "title": "Trace Id",
+          "type": "string"
+        },
+        "timestamp": {
+          "title": "Timestamp",
+          "type": "string"
+        },
+        "message": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Message"
+        }
+      },
+      "required": [
+        "trace_id",
+        "timestamp"
+      ],
+      "title": "NearbyOffersData",
+      "type": "object"
+    },
+    "source": "advertised"
+  },
+  "internal_get_store_deals": {
+    "component": "DDGetStoreDealsResult",
+    "schema": {
+      "description": "Response data for internal_get_store_deals.",
+      "properties": {
+        "success": {
+          "default": true,
+          "title": "Success",
+          "type": "boolean"
+        },
+        "store_id": {
+          "title": "Store Id",
+          "type": "integer"
+        },
+        "total_deals": {
+          "default": 0,
+          "title": "Total Deals",
+          "type": "integer"
+        },
+        "deals": {
+          "items": {
+            "$ref": "#/components/schemas/DDStoreDeal"
+          },
+          "title": "Deals",
+          "type": "array"
+        },
+        "trace_id": {
+          "title": "Trace Id",
+          "type": "string"
+        },
+        "timestamp": {
+          "title": "Timestamp",
+          "type": "string"
+        },
+        "message": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Message"
+        }
+      },
+      "required": [
+        "store_id",
+        "trace_id",
+        "timestamp"
+      ],
+      "title": "StoreDealsData",
+      "type": "object"
+    },
+    "source": "advertised"
+  },
   "doordash_create_product_list": {
     "component": "DDCreateProductListResult",
     "schema": {
@@ -2461,6 +2849,72 @@ export const TOOL_RESULT_SCHEMAS: Record<string, { component: string; schema: Re
     },
     "source": "advertised"
   },
+  "internal_update_cart_item": {
+    "component": "DDUpdateCartItemResult",
+    "schema": {
+      "description": "Response from updating an item in a cart.",
+      "properties": {
+        "cart_id": {
+          "title": "Cart Id",
+          "type": "string"
+        },
+        "item_id": {
+          "title": "Item Id",
+          "type": "string"
+        },
+        "new_quantity": {
+          "title": "New Quantity",
+          "type": "integer"
+        },
+        "success": {
+          "default": true,
+          "title": "Success",
+          "type": "boolean"
+        },
+        "message": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Message"
+        }
+      },
+      "required": [
+        "cart_id",
+        "item_id",
+        "new_quantity"
+      ],
+      "title": "UpdateCartItemResponse",
+      "type": "object"
+    },
+    "source": "advertised"
+  },
+  "doordash_update_delivery_option": {
+    "component": "DDUpdateDeliveryOptionResult",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "cart_uuid": {
+          "type": "string"
+        },
+        "fulfillment_type": {
+          "type": "string"
+        },
+        "success": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    },
+    "source": "advertised"
+  },
   "internal_list_eligible_cart_promotions": {
     "component": "DDListEligibleCartPromotionsResult",
     "schema": {
@@ -2704,6 +3158,143 @@ export const TOOL_RESULT_SCHEMAS: Record<string, { component: string; schema: Re
         "promo_code"
       ],
       "title": "CartPromotionResponse",
+      "type": "object"
+    },
+    "source": "advertised"
+  },
+  "internal_get_applied_cart_promotions": {
+    "component": "DDGetAppliedCartPromotionsResult",
+    "schema": {
+      "description": "Response from listing the promotions currently applied to a cart.",
+      "properties": {
+        "cart_uuid": {
+          "title": "Cart Uuid",
+          "type": "string"
+        },
+        "promotions": {
+          "items": {
+            "$ref": "#/components/schemas/DDCartPromotionEntry"
+          },
+          "title": "Promotions",
+          "type": "array"
+        },
+        "total_discount_cents": {
+          "default": 0,
+          "title": "Total Discount Cents",
+          "type": "integer"
+        },
+        "subtotal_cents": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subtotal Cents"
+        },
+        "total_before_tip_cents": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Total Before Tip Cents"
+        },
+        "success": {
+          "default": true,
+          "title": "Success",
+          "type": "boolean"
+        },
+        "message": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Message"
+        }
+      },
+      "required": [
+        "cart_uuid",
+        "promotions"
+      ],
+      "title": "AppliedPromotionsResponse",
+      "type": "object"
+    },
+    "source": "advertised"
+  },
+  "internal_get_promo_eligible_items": {
+    "component": "DDGetPromoEligibleItemsResult",
+    "schema": {
+      "description": "Response from listing campaign-filtered promo items for a store.",
+      "properties": {
+        "store_id": {
+          "title": "Store Id",
+          "type": "string"
+        },
+        "campaign_id": {
+          "title": "Campaign Id",
+          "type": "string"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/components/schemas/DDItemSearchResult"
+          },
+          "title": "Items",
+          "type": "array"
+        },
+        "total_items": {
+          "default": 0,
+          "title": "Total Items",
+          "type": "integer"
+        },
+        "success": {
+          "default": true,
+          "title": "Success",
+          "type": "boolean"
+        },
+        "message": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Message"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source"
+        }
+      },
+      "required": [
+        "store_id",
+        "campaign_id",
+        "items"
+      ],
+      "title": "PromoEligibleItemsResponse",
       "type": "object"
     },
     "source": "advertised"

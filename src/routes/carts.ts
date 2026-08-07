@@ -156,6 +156,90 @@ export function registerCartRoutes(app: OpenAPIHono<AppEnv>): void {
     },
   )
 
+  // internal_update_cart_item
+  app.openapi(
+    createRoute({
+      method: 'patch',
+      path: '/v1/carts/{cart_uuid}/items/{cart_item_id}',
+      tags,
+      summary: 'Change an item’s quantity',
+      description:
+        '`cart_item_id` is the **cart-line id** — the `id` on an entry of the cart’s `items`, not the menu ' +
+        '`item_id`. The same id the delete route takes.\n\n' +
+        'Setting `quantity` to 0 removes the item, which is what `DELETE` on this path does. Use whichever reads ' +
+        'better; they end up in the same place.',
+      security,
+      request: {
+        params: z.object({ cart_uuid: CartUuidParam, cart_item_id: z.string().min(1) }),
+        body: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: z
+                .object({
+                  quantity: z.int().min(0).meta({ description: 'New quantity. 0 removes the item.' }),
+                  menu_item_id: z.string().min(1).optional().meta({
+                    description:
+                      'The menu item id for this line (`item_id` on the cart entry). Optional, and distinct ' +
+                      'from the cart-line id in the path.',
+                  }),
+                })
+                .openapi('UpdateCartItemBody'),
+            },
+          },
+        },
+      },
+      responses: toolResponses('Updated quantity.', TOOLS.updateCartItem),
+    }),
+    async (c) => {
+      const { cart_uuid, cart_item_id } = c.req.valid('param')
+      const { quantity, menu_item_id } = c.req.valid('json')
+      return c.json(
+        await callTool(c, TOOLS.updateCartItem, {
+          cart_id: cart_uuid,
+          item_id: cart_item_id,
+          quantity,
+          menu_item_id,
+        }),
+      )
+    },
+  )
+
+  // doordash_update_delivery_option
+  app.openapi(
+    createRoute({
+      method: 'put',
+      path: '/v1/carts/{cart_uuid}/fulfillment',
+      tags,
+      summary: 'Switch a cart between delivery and pickup',
+      description:
+        'Changes an existing cart’s fulfillment. `is_pickup` is otherwise only settable when the cart is first ' +
+        'created, so without this changing your mind means starting the cart over.',
+      security,
+      request: {
+        params: z.object({ cart_uuid: CartUuidParam }),
+        body: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: z
+                .object({
+                  is_pickup: z.boolean().meta({ description: 'True for pickup, false for delivery.' }),
+                  include_pricing: z.boolean().optional().meta({ description: PRICING_NOTE }),
+                })
+                .openapi('UpdateFulfillmentBody'),
+            },
+          },
+        },
+      },
+      responses: toolResponses('Updated fulfillment type.', TOOLS.updateDeliveryOption),
+    }),
+    async (c) => {
+      const { cart_uuid } = c.req.valid('param')
+      return c.json(await callTool(c, TOOLS.updateDeliveryOption, { ...c.req.valid('json'), cart_uuid }))
+    },
+  )
+
   // doordash_create_product_list
   app.openapi(
     createRoute({

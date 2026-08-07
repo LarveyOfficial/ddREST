@@ -274,6 +274,85 @@ const CASES: Case[] = [
     tool: TOOLS.getPaymentInfo,
     required: ['intent'],
   },
+  {
+    name: 'update cart item quantity',
+    method: 'PATCH',
+    path: '/v1/carts/cart-7/items/line-3',
+    body: { quantity: 4 },
+    tool: TOOLS.updateCartItem,
+    required: ['cart_id', 'item_id', 'quantity', 'intent'],
+    // The path carries the cart-line id; upstream calls the pair cart_id/item_id.
+    expect: { cart_id: 'cart-7', item_id: 'line-3', quantity: 4 },
+  },
+  {
+    name: 'remove an item by setting quantity to zero',
+    method: 'PATCH',
+    path: '/v1/carts/cart-7/items/line-3',
+    body: { quantity: 0 },
+    tool: TOOLS.updateCartItem,
+    required: ['cart_id', 'item_id', 'quantity', 'intent'],
+    expect: { quantity: 0 },
+  },
+  {
+    name: 'switch a cart to pickup',
+    method: 'PUT',
+    path: '/v1/carts/cart-7/fulfillment',
+    body: { is_pickup: true },
+    tool: TOOLS.updateDeliveryOption,
+    required: ['cart_uuid', 'is_pickup', 'intent'],
+    expect: { cart_uuid: 'cart-7', is_pickup: true },
+  },
+  {
+    name: 'applied cart promotions',
+    method: 'GET',
+    path: '/v1/carts/cart-7/promotions',
+    tool: TOOLS.getAppliedPromotions,
+    required: ['cart_uuid', 'intent'],
+    expect: { cart_uuid: 'cart-7' },
+  },
+  {
+    name: 'promo eligible items',
+    method: 'GET',
+    path: '/v1/stores/327011/promotions/camp-1/items?max_results=5&fulfillment_type=PICKUP',
+    tool: TOOLS.getPromoEligibleItems,
+    required: ['store_id', 'campaign_id', 'intent'],
+    expect: { store_id: '327011', campaign_id: 'camp-1', max_results: 5, fulfillment_type: 'PICKUP' },
+  },
+  {
+    name: 'nearby offers',
+    method: 'GET',
+    path: '/v1/offers?latitude=41.9&longitude=-87.6&limit=10',
+    tool: TOOLS.getNearbyOffers,
+    required: ['user_lat', 'user_lon', 'intent'],
+    expect: { user_lat: 41.9, user_lon: -87.6, limit: 10 },
+  },
+  {
+    name: 'store deals',
+    method: 'GET',
+    path: '/v1/stores/1836920/deals?limit=20',
+    tool: TOOLS.getStoreDeals,
+    required: ['store_id', 'intent'],
+    // Upstream types store_id as an integer for this tool alone.
+    expect: { store_id: 1836920, limit: 20 },
+  },
+  {
+    name: 'set delivery instructions',
+    method: 'PUT',
+    path: '/v1/addresses/6065321966/instructions',
+    body: { delivery_instructions: 'Gate code 1234' },
+    tool: TOOLS.setDeliveryInstructions,
+    required: ['address_link_id', 'delivery_instructions', 'intent'],
+    expect: { address_link_id: '6065321966', delivery_instructions: 'Gate code 1234' },
+  },
+  {
+    name: 'set address label',
+    method: 'PUT',
+    path: '/v1/addresses/6065321966/label',
+    body: { label: 'home' },
+    tool: TOOLS.setAddressLabel,
+    required: ['address_link_id', 'label', 'intent'],
+    expect: { address_link_id: '6065321966', label: 'home' },
+  },
 ]
 
 describe('tool routes', () => {
@@ -301,10 +380,10 @@ describe('tool routes', () => {
     })
   }
 
-  test('covers all 26 tools', () => {
+  test('covers every tool', () => {
     const covered = new Set(CASES.map((c) => c.tool))
     const all = new Set<string>(Object.values(TOOLS))
-    expect(all.size).toBe(26)
+    expect(all.size).toBe(34)
     expect([...all].filter((t) => !covered.has(t))).toEqual([])
   })
 })
@@ -416,10 +495,10 @@ describe('openapi document', () => {
     expect(Object.keys(doc.components.securitySchemes).sort()).toEqual(['sessionBearer', 'sessionCookie'])
 
     const operations = Object.values(doc.paths).flatMap((methods: Record<string, unknown>) =>
-      Object.keys(methods).filter((m) => ['get', 'post', 'put', 'delete'].includes(m)),
+      Object.keys(methods).filter((m) => ['get', 'post', 'put', 'patch', 'delete'].includes(m)),
     )
-    // 26 tools + the extra add-to-cart entry point + 4 auth routes + 5 pairing routes.
-    expect(operations).toHaveLength(36)
+    // 34 tools + the extra add-to-cart entry point + 4 auth routes + 5 pairing routes.
+    expect(operations).toHaveLength(44)
     expect(doc.paths['/v1/auth/login/complete']).toBeDefined()
 
     // Pairing is additive: the original login flow must still be documented.

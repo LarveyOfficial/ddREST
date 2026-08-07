@@ -122,6 +122,90 @@ export function registerDiscoveryRoutes(app: OpenAPIHono<AppEnv>): void {
     },
   )
 
+  // internal_get_nearby_offers
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/v1/offers',
+      tags,
+      summary: 'Restaurant offers near a location',
+      description:
+        `Cross-store deals — the same feed behind the DoorDash app’s Offers page. ${LOCATION_NOTE}\n\n` +
+        'Paginated: pass the `next_cursor` from a response back as `cursor` for the following page.',
+      security,
+      request: {
+        query: z.object({
+          latitude: LatitudeQuery.optional(),
+          longitude: LongitudeQuery.optional(),
+          address_id: AddressIdQuery.optional(),
+          limit: z.coerce.number().int().min(1).max(100).optional().meta({
+            description: 'Upstream defaults to 25.',
+          }),
+          cursor: z.string().min(1).optional().meta({
+            description: 'The `next_cursor` from a previous response. Omit for the first page.',
+          }),
+        }),
+      },
+      responses: toolResponses('Nearby offers.', TOOLS.getNearbyOffers),
+    }),
+    async (c) => {
+      const cfg = c.get('config')
+      const { limit, cursor, ...location } = c.req.valid('query')
+      const { latitude, longitude } = await resolveLocation(c, location)
+      // Upstream rejects the request outright without coordinates, so the
+      // configured default stands in rather than letting it fail.
+      return c.json(
+        await callTool(c, TOOLS.getNearbyOffers, {
+          user_lat: latitude ?? cfg.defaultLatitude,
+          user_lon: longitude ?? cfg.defaultLongitude,
+          limit,
+          cursor,
+        }),
+      )
+    },
+  )
+
+  // internal_get_store_deals
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/v1/stores/{store_id}/deals',
+      tags,
+      summary: 'Item-level deals at one store',
+      description:
+        'The store’s Deals tab: discounted prices, sizes and member-pricing flags. Grocery and retail stores; a ' +
+        `restaurant’s promotions live under /v1/stores/{store_id}/promotions instead. ${LOCATION_NOTE}`,
+      security,
+      request: {
+        params: z.object({ store_id: StoreIdParam }),
+        query: z.object({
+          latitude: LatitudeQuery.optional(),
+          longitude: LongitudeQuery.optional(),
+          address_id: AddressIdQuery.optional(),
+          limit: z.coerce.number().int().min(1).max(500).optional().meta({
+            description: 'Upstream defaults to 50. A large store can carry hundreds.',
+          }),
+        }),
+      },
+      responses: toolResponses('Deals at the store.', TOOLS.getStoreDeals),
+    }),
+    async (c) => {
+      const { store_id } = c.req.valid('param')
+      const { limit, ...location } = c.req.valid('query')
+      const { latitude, longitude } = await resolveLocation(c, location)
+      // Upstream types store_id as an integer here, unlike every other route.
+      const numericStoreId = Number(store_id)
+      return c.json(
+        await callTool(c, TOOLS.getStoreDeals, {
+          store_id: Number.isInteger(numericStoreId) ? numericStoreId : store_id,
+          user_lat: latitude,
+          user_lon: longitude,
+          limit,
+        }),
+      )
+    },
+  )
+
   // internal_get_store_info
   app.openapi(
     createRoute({
