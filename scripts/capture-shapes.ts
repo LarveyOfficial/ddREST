@@ -3,7 +3,12 @@
  *
  * Run:  bun run capture-shapes                # read-only
  *       bun run capture-shapes --with-cart    # also covers cart/preview shapes
+ *       bun run capture-shapes --fresh        # discard previous captures first
  *       bun run gen-schemas
+ *
+ * Runs accumulate. What can be captured depends on what exists on the account
+ * at the time — no active cart means no get_cart shape — so each run keeps
+ * whatever earlier ones found and only replaces the tools it captures itself.
  *
  * The gateway's advertised `outputSchema` is not enough to document a response.
  * Six of the tools we use declare a bare `{additionalProperties: true}`, and
@@ -43,6 +48,7 @@ const cfg = loadConfig({
 const argv = process.argv.slice(2)
 const pastedCallback = argv.find((a) => a.includes('://') || a.includes('code='))
 const withCart = argv.includes('--with-cart')
+const fresh = argv.includes('--fresh')
 const accessToken = process.env.DD_ACCESS_TOKEN ?? (await loginForToken())
 
 async function loginForToken(): Promise<string> {
@@ -176,10 +182,36 @@ function merge(a: Schema, b: Schema): Schema {
 
 // ---------------------------------------------------------------- capture
 
-const observed: Record<string, Schema> = {}
+/**
+ * Previous runs are carried forward, not overwritten.
+ *
+ * Coverage depends on what happens to exist on the account at the time: no
+ * active cart means no get_cart shape, no past orders means no receipt shape.
+ * A plain re-run would otherwise delete whatever the last run managed to
+ * capture, so a read-only run after a --with-cart run would silently undo it.
+ *
+ * A tool captured in *this* run replaces its previous entry outright rather
+ * than merging, so a field DoorDash has removed does not linger forever.
+ */
+let observed: Record<string, Schema> = {}
+if (!fresh) {
+  try {
+    observed = JSON.parse(await Bun.file(OUT).text()) as Record<string, Schema>
+    console.log(`Carrying forward ${Object.keys(observed).length} shapes from ${OUT}.`)
+  } catch {
+    // No previous capture; starting from nothing is the normal first run.
+  }
+}
+const carriedOver = new Set(Object.keys(observed))
+const capturedNow = new Set<string>()
+
 const record = (tool: ToolName, body: Record<string, unknown> | undefined) => {
   if (!body) return
-  observed[tool] = observed[tool] ? merge(observed[tool], infer(body)) : infer(body)
+  const shape = infer(body)
+  // Merge only with samples from this run — several calls to the same tool with
+  // different arguments each show a bit more of the shape.
+  observed[tool] = capturedNow.has(tool) ? merge(observed[tool]!, shape) : shape
+  capturedNow.add(tool)
   console.log(`   ${tool}: captured ${Object.keys(body).length} top-level fields`)
 }
 
@@ -326,7 +358,11 @@ if (orderUuid) {
 await Bun.write(OUT, JSON.stringify(observed, null, 2))
 
 const missing = Object.values(TOOLS).filter((t) => !(t in observed))
+const kept = [...carriedOver].filter((t) => !capturedNow.has(t))
+
 console.log(`\nWrote ${OUT}`)
-console.log(`  captured: ${Object.keys(observed).length}/${Object.values(TOOLS).length} tools`)
-if (missing.length) console.log(`  not captured: ${missing.join(', ')}`)
+console.log(`  captured this run: ${capturedNow.size}`)
+if (kept.length) console.log(`  kept from earlier: ${kept.length} (${kept.join(', ')})`)
+console.log(`  total: ${Object.keys(observed).length}/${Object.values(TOOLS).length} tools`)
+if (missing.length) console.log(`  never captured: ${missing.join(', ')}`)
 console.log('\nTypes only — no values from the account are recorded. Now run:  bun run gen-schemas')
