@@ -30,6 +30,14 @@ export type ErrorCode =
   | 'too_many_requests'
   | 'address_not_found'
   | 'address_missing_coordinates'
+  // Resolver shorthands (`latest`, `default`, `name:`) that matched nothing.
+  | 'cart_not_found'
+  | 'order_not_found'
+  | 'store_not_found'
+  | 'menu_not_found'
+  | 'read_only'
+  | 'total_mismatch'
+  | 'idempotency_conflict'
   | 'doordash_unauthorized'
   | 'doordash_forbidden'
   | 'doordash_tool_error'
@@ -56,6 +64,25 @@ export class ApiError extends Error {
 
   static badRequest(message: string, extra?: Record<string, unknown>) {
     return new ApiError(400, 'invalid_request', message, extra)
+  }
+
+  /** The same error with more context attached. Status, code and message are unchanged. */
+  with(extra: Record<string, unknown>): ApiError {
+    return new ApiError(this.status, this.code, this.message, { ...this.extra, ...extra })
+  }
+
+  /**
+   * Seconds a client should wait before retrying, for a `Retry-After` header.
+   *
+   * Read off `extra` rather than stored separately so there is one source of
+   * truth: whatever the body advertises is what the header says.
+   */
+  get retryAfterSeconds(): number | undefined {
+    for (const key of ['retry_after_seconds', 'interval']) {
+      const value = this.extra[key]
+      if (typeof value === 'number' && Number.isFinite(value) && value > 0) return Math.ceil(value)
+    }
+    return undefined
   }
 }
 

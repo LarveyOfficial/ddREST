@@ -45,9 +45,26 @@ export const GroupCartConfigSchema = z
   })
   .openapi('GroupCartConfig', { description: 'Group-cart settings (host-pays-all, per-participant limit).' })
 
-export const StoreIdParam = z.string().min(1).meta({ description: 'DoorDash store id.', example: '327011' })
-export const CartUuidParam = z.string().min(1).meta({ description: 'Cart UUID.' })
-export const OrderUuidParam = z.string().min(1).meta({ description: 'Order UUID.' })
+export const StoreIdParam = z.string().min(1).meta({
+  description:
+    'DoorDash store id, or `name:<store name>` to look one up near your default address. A name matching ' +
+    'several nearby stores is refused rather than guessed at. The id used is returned in `X-Resolved-Store-Id`.',
+  example: '327011',
+})
+
+export const CartUuidParam = z.string().min(1).meta({
+  description:
+    'Cart UUID, or a shorthand: `latest` for the most recently updated active cart, or `store:<store_id>` for ' +
+    'the active cart at one store. The uuid used is returned in `X-Resolved-Cart-Uuid`.',
+  example: 'latest',
+})
+
+export const OrderUuidParam = z.string().min(1).meta({
+  description:
+    'Order UUID, or `latest` for the most recent order in the last 90 days. The uuid used is returned in ' +
+    '`X-Resolved-Order-Uuid`.',
+  example: 'latest',
+})
 
 /** Query params arrive as strings; coerce then bound. */
 export const LatitudeQuery = z.coerce.number().min(-90).max(90)

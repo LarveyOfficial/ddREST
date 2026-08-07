@@ -91,6 +91,9 @@ export class PairingManager {
         'too_many_requests',
         `Too many pairings are already waiting for approval (limit ${this.#cfg.pairingMaxPending}). ` +
           'Approve or abandon one and try again; abandoned ones clear on their own when they expire.',
+        // Surfaces as Retry-After. The queue drains as pairings expire, so the
+        // poll interval is the useful cadence rather than a fixed penalty.
+        { retry_after_seconds: this.#cfg.pairingPollIntervalSeconds },
       )
     }
 
@@ -279,6 +282,8 @@ export class PairingManager {
         429,
         'too_many_requests',
         'Too many incorrect pairing codes were submitted. Wait a minute and try again.',
+        // The failure window is what actually has to elapse, so say so.
+        { retry_after_seconds: LOOKUP_FAILURE_WINDOW_SECONDS },
       )
     }
   }

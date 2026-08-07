@@ -1,4 +1,5 @@
 import { OpenAPIHono, z } from '@hono/zod-openapi'
+import type { MiddlewareHandler } from 'hono'
 import { cors } from 'hono/cors'
 import { HTTPException } from 'hono/http-exception'
 import type { Config } from './config.ts'
@@ -9,6 +10,7 @@ import { sessionMiddleware } from './auth/middleware.ts'
 import { SESSION_PREFIX } from './session/store.ts'
 import { SessionManager } from './session/manager.ts'
 import { PairingManager } from './pairing/manager.ts'
+import { IdempotencyStore } from './orders/idempotency.ts'
 import type { AppEnv } from './types.ts'
 import { SHARED_RESULT_DEFS } from './schemas/results.generated.ts'
 import { registerAuthRoutes } from './routes/auth.ts'
@@ -19,6 +21,33 @@ import { registerCartRoutes } from './routes/carts.ts'
 import { registerPromotionRoutes } from './routes/promotions.ts'
 import { registerOrderRoutes } from './routes/orders.ts'
 import { registerAccountRoutes } from './routes/account.ts'
+import { registerSuggestionRoutes } from './routes/suggestions.ts'
+import { withNotFoundHints } from './routes/hints.ts'
+
+/** Methods that cannot change anything, so they stay open in read-only mode. */
+const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
+
+/**
+ * Paths exempt from READ_ONLY despite using a write method.
+ *
+ * Logging in and pairing a device are not "changes" in the sense READ_ONLY
+ * cares about — blocking them would make a read-only instance impossible to
+ * authenticate against, which is not a safer state, just a useless one.
+ */
+const READ_ONLY_EXEMPT = /^\/v1\/auth\//
+
+function readOnlyGuard(): MiddlewareHandler<AppEnv> {
+  return async (c, next) => {
+    if (READ_METHODS.has(c.req.method) || READ_ONLY_EXEMPT.test(c.req.path)) return next()
+    throw new ApiError(
+      403,
+      'read_only',
+      'This ddREST instance runs in read-only mode: browsing works, changing carts and placing orders does not. ' +
+        'Unset READ_ONLY to allow them.',
+      { method: c.req.method, path: c.req.path },
+    )
+  }
+}
 
 export function createApp(cfg: Config): OpenAPIHono<AppEnv> {
   const sealers = createAuthSealers(cfg)
@@ -27,6 +56,7 @@ export function createApp(cfg: Config): OpenAPIHono<AppEnv> {
   sessions.startSweeper()
   const pairings = new PairingManager(cfg, sealers)
   if (cfg.pairingEnabled) pairings.startSweeper()
+  const idempotency = new IdempotencyStore(cfg.idempotencyDbPath)
 
   const app = new OpenAPIHono<AppEnv>({
     // Surface Zod failures in the same error envelope as everything else.
@@ -49,9 +79,14 @@ export function createApp(cfg: Config): OpenAPIHono<AppEnv> {
     c.set('sealers', sealers)
     c.set('sessions', sessions)
     c.set('pairings', pairings)
+    c.set('idempotency', idempotency)
     c.set('mcp', mcp)
     await next()
   })
+
+  // Refuse anything that changes state before it reaches a route, so a
+  // read-only instance cannot spend money through a path we forgot to guard.
+  if (cfg.readOnly) app.use('/v1/*', readOnlyGuard())
 
   if (cfg.corsOrigins.length > 0) {
     app.use(
@@ -75,12 +110,13 @@ export function createApp(cfg: Config): OpenAPIHono<AppEnv> {
   // Everything below the auth routes needs a session. Registered as route-level
   // middleware rather than a blanket app.use so the OpenAPI document reflects it.
   const guarded = sessionMiddleware()
-  for (const path of ['/v1/restaurants', '/v1/nearby-stores', '/v1/offers', '/v1/stores/*', '/v1/carts', '/v1/carts/*', '/v1/orders', '/v1/orders/*', '/v1/addresses', '/v1/addresses/*', '/v1/payment-methods', '/v1/product-lists']) {
+  for (const path of ['/v1/me', '/v1/restaurants', '/v1/nearby-stores', '/v1/offers', '/v1/stores/*', '/v1/carts', '/v1/carts/*', '/v1/orders', '/v1/orders/*', '/v1/addresses', '/v1/addresses/*', '/v1/payment-methods', '/v1/product-lists']) {
     app.use(path, guarded)
   }
 
   registerDiscoveryRoutes(app)
   registerCartRoutes(app)
+  registerSuggestionRoutes(app)
   registerPromotionRoutes(app)
   registerOrderRoutes(app)
   registerAccountRoutes(app)
@@ -144,8 +180,18 @@ export function createApp(cfg: Config): OpenAPIHono<AppEnv> {
     ],
   })
 
-  app.onError((err, c) => {
-    if (err instanceof ApiError) return c.json(err.toBody(), err.status as 400)
+  app.onError(async (err, c) => {
+    if (err instanceof ApiError) {
+      // The one real error boundary: Hono's compose catches a throw at the
+      // frame that raised it, so an enclosing middleware never sees it.
+      const decorated = await withNotFoundHints(c, err)
+      // Standard header as well as the body field, because generic HTTP
+      // clients and off-the-shelf device-flow clients read the header and
+      // never look inside the JSON.
+      const retryAfter = decorated.retryAfterSeconds
+      if (retryAfter !== undefined) c.header('Retry-After', String(retryAfter))
+      return c.json(decorated.toBody(), decorated.status as 400)
+    }
     if (err instanceof HTTPException) {
       return c.json({ error: 'invalid_request', message: err.message }, err.status)
     }

@@ -4,6 +4,7 @@ import { createRoute, z, type OpenAPIHono } from '@hono/zod-openapi'
 import type { AppEnv } from '../types.ts'
 import { TOOLS } from '../mcp/tools.ts'
 import { callTool, security, toolResponses } from './shared.ts'
+import { resolveCartUuid, resolveStoreId } from './resolve.ts'
 import { CartUuidParam, StoreIdParam } from '../schemas/common.ts'
 
 const tags = ['Promotions']
@@ -29,7 +30,7 @@ export function registerPromotionRoutes(app: OpenAPIHono<AppEnv>): void {
     }),
     async (c) => {
       const { store_id } = c.req.valid('param')
-      return c.json(await callTool(c, TOOLS.listPromotions, { store_id }))
+      return c.json(await callTool(c, TOOLS.listPromotions, { store_id: await resolveStoreId(c, store_id) }))
     },
   )
 
@@ -47,7 +48,7 @@ export function registerPromotionRoutes(app: OpenAPIHono<AppEnv>): void {
       request: {
         params: z.object({ store_id: StoreIdParam, campaign_id: z.string().min(1) }),
         query: z.object({
-          max_results: z.coerce.number().int().min(1).max(50).optional().meta({
+          limit: z.coerce.number().int().min(1).max(50).optional().meta({
             description: 'Upstream defaults to 20 and caps at 50.',
           }),
           fulfillment_type: z.enum(['DELIVERY', 'PICKUP']).optional(),
@@ -57,8 +58,14 @@ export function registerPromotionRoutes(app: OpenAPIHono<AppEnv>): void {
     }),
     async (c) => {
       const { store_id, campaign_id } = c.req.valid('param')
+      const { limit, fulfillment_type } = c.req.valid('query')
       return c.json(
-        await callTool(c, TOOLS.getPromoEligibleItems, { store_id, campaign_id, ...c.req.valid('query') }),
+        await callTool(c, TOOLS.getPromoEligibleItems, {
+          store_id: await resolveStoreId(c, store_id),
+          campaign_id,
+          max_results: limit,
+          fulfillment_type,
+        }),
       )
     },
   )
@@ -78,7 +85,7 @@ export function registerPromotionRoutes(app: OpenAPIHono<AppEnv>): void {
       responses: toolResponses('Applied promotions and discount totals.', TOOLS.getAppliedPromotions),
     }),
     async (c) => {
-      const { cart_uuid } = c.req.valid('param')
+      const cart_uuid = await resolveCartUuid(c, c.req.valid('param').cart_uuid)
       return c.json(await callTool(c, TOOLS.getAppliedPromotions, { cart_uuid }))
     },
   )
@@ -107,7 +114,7 @@ export function registerPromotionRoutes(app: OpenAPIHono<AppEnv>): void {
       responses: toolResponses('Updated cart.', TOOLS.applyPromotion),
     }),
     async (c) => {
-      const { cart_uuid } = c.req.valid('param')
+      const cart_uuid = await resolveCartUuid(c, c.req.valid('param').cart_uuid)
       return c.json(await callTool(c, TOOLS.applyPromotion, { ...c.req.valid('json'), cart_uuid }))
     },
   )
@@ -128,7 +135,13 @@ export function registerPromotionRoutes(app: OpenAPIHono<AppEnv>): void {
     }),
     async (c) => {
       const { cart_uuid, promo_code } = c.req.valid('param')
-      return c.json(await callTool(c, TOOLS.removePromotion, { ...c.req.valid('query'), cart_uuid, promo_code }))
+      return c.json(
+        await callTool(c, TOOLS.removePromotion, {
+          ...c.req.valid('query'),
+          cart_uuid: await resolveCartUuid(c, cart_uuid),
+          promo_code,
+        }),
+      )
     },
   )
 }

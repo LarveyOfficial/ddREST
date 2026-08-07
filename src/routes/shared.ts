@@ -36,6 +36,19 @@ const errorResponse = (description: string) => ({
   content: { 'application/json': { schema: ErrorSchema } },
 })
 
+/**
+ * Extra responses for order submission.
+ *
+ * Declared `as const` alongside commonErrorResponses rather than inlined at the
+ * route: zod-openapi infers a handler's permitted return types from the
+ * responses map, and a widened entry makes every `c.json` at that route have to
+ * satisfy the error schema too.
+ */
+export const submitErrorResponses = {
+  409: errorResponse('The Idempotency-Key was already used for a different request.'),
+  412: errorResponse('confirm_total_cents did not match the re-priced cart. Nothing was ordered.'),
+} as const
+
 /** Attached to every authenticated tool route. */
 export const commonErrorResponses = {
   400: errorResponse('Invalid request.'),

@@ -31,6 +31,9 @@ export const DEFAULT_KEYWORD = 'default'
 const LAT_FIELDS = ['lat', 'latitude']
 const LNG_FIELDS = ['lng', 'lon', 'long', 'longitude']
 
+/** The label a saved address carries — "home", "work", whatever was set. */
+const LABEL_ONLY_FIELDS = ['label', 'address_label', 'name']
+
 export interface LocationInput {
   latitude?: number
   longitude?: number
@@ -40,6 +43,8 @@ export interface LocationInput {
 export interface ResolvedLocation {
   latitude?: number
   longitude?: number
+  /** Set when a shorthand was resolved, so the route can report what it picked. */
+  addressId?: string
 }
 
 /**
@@ -66,7 +71,7 @@ export async function resolveLocation(c: Context<AppEnv>, input: LocationInput):
   const result = await callTool(c, TOOLS.listDeliveryAddresses, {})
 
   // A literal id match is tried first, so a real address whose id happened to
-  // be "default" would still win over the keyword.
+  // be "default" or "home" still wins over the shorthand reading of it.
   let address = findAddress(result, address_id)
   if (!address && address_id.toLowerCase() === DEFAULT_KEYWORD) {
     address = findDefaultAddress(result)
@@ -79,6 +84,22 @@ export async function resolveLocation(c: Context<AppEnv>, input: LocationInput):
       )
     }
   }
+  // Labels are what people actually call their addresses, and PUT
+  // /v1/addresses/{id}/label exists to set them, so accepting one here closes
+  // the loop. Ambiguity is refused rather than resolved arbitrarily.
+  if (!address) {
+    const labelled = findByLabel(result, address_id)
+    if (labelled.length > 1) {
+      throw new ApiError(
+        400,
+        'address_not_found',
+        `${JSON.stringify(address_id)} matches ${labelled.length} saved addresses, so it is ambiguous. ` +
+          'Pass the address_id of the one you mean.',
+        { addresses: '/v1/addresses', known_addresses: collectAddresses(result) },
+      )
+    }
+    address = labelled[0]
+  }
 
   if (!address) {
     // Ids are opaque numbers, so listing them bare is little help — pair each
@@ -87,8 +108,9 @@ export async function resolveLocation(c: Context<AppEnv>, input: LocationInput):
     throw new ApiError(
       400,
       'address_not_found',
-      `No saved address has the id ${JSON.stringify(address_id)}. ` +
-        `Use one of the ids below, or "${DEFAULT_KEYWORD}" for whichever address is marked as the default.`,
+      `No saved address has the id or label ${JSON.stringify(address_id)}. ` +
+        `Use one of the entries below, its label, or "${DEFAULT_KEYWORD}" for whichever address is marked as ` +
+        'the account default.',
       { addresses: '/v1/addresses', ...(known.length > 0 ? { known_addresses: known } : {}) },
     )
   }
@@ -104,7 +126,27 @@ export async function resolveLocation(c: Context<AppEnv>, input: LocationInput):
     )
   }
 
-  return coords
+  return { ...coords, addressId: idOf(address) }
+}
+
+/** Saved addresses whose label matches, compared loosely so "Home" finds "home". */
+function findByLabel(result: unknown, label: string): Record<string, unknown>[] {
+  const wanted = label.trim().toLowerCase()
+  const matches: Record<string, unknown>[] = []
+  const seen = new Set<string>()
+  for (const obj of walkObjects(result)) {
+    const id = idOf(obj)
+    if (id === undefined || seen.has(id) || !coordinatesOf(obj)) continue
+    const hit = LABEL_ONLY_FIELDS.some((field) => {
+      const value = obj[field]
+      return typeof value === 'string' && value.trim().toLowerCase() === wanted
+    })
+    if (hit) {
+      seen.add(id)
+      matches.push(obj)
+    }
+  }
+  return matches
 }
 
 /** Every object anywhere in the payload, so the array's nesting does not matter. */
@@ -169,19 +211,30 @@ function findDefaultAddress(result: unknown): Record<string, unknown> | undefine
 
 const LABEL_FIELDS = ['printable_address', 'street_address', 'label', 'name', 'address']
 
+interface KnownAddress {
+  id: string
+  address?: string
+  label?: string
+  default?: true
+}
+
 /** The usable addresses in the payload, so a wrong id can be corrected without a second call. */
-function collectAddresses(result: unknown): { id: string; address?: string; default?: true }[] {
-  const found = new Map<string, { id: string; address?: string; default?: true }>()
+function collectAddresses(result: unknown): KnownAddress[] {
+  const found = new Map<string, KnownAddress>()
   for (const obj of walkObjects(result)) {
     // Only objects that also carry coordinates; ids on unrelated nested objects
     // would be noise in the error.
     const id = idOf(obj)
     if (id === undefined || found.has(id) || !coordinatesOf(obj)) continue
 
-    const label = LABEL_FIELDS.map((f) => obj[f]).find((v) => typeof v === 'string' && v.trim() !== '')
+    const printable = LABEL_FIELDS.map((f) => obj[f]).find((v) => typeof v === 'string' && v.trim() !== '')
+    // Reported separately from the printable address because it is itself a
+    // valid value for address_id now.
+    const label = LABEL_ONLY_FIELDS.map((f) => obj[f]).find((v) => typeof v === 'string' && v.trim() !== '')
     found.set(id, {
       id,
-      ...(typeof label === 'string' ? { address: label } : {}),
+      ...(typeof printable === 'string' ? { address: printable } : {}),
+      ...(typeof label === 'string' ? { label } : {}),
       ...(DEFAULT_FIELDS.some((field) => obj[field] === true) ? { default: true as const } : {}),
     })
   }

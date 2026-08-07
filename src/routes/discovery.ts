@@ -6,6 +6,7 @@ import { TOOLS } from '../mcp/tools.ts'
 import { callTool, security, toolResponses } from './shared.ts'
 import { AddressIdQuery, BooleanQuery, LatitudeQuery, LongitudeQuery, StoreIdParam } from '../schemas/common.ts'
 import { resolveLocation } from './location.ts'
+import { resolveStoreId } from './resolve.ts'
 
 const LOCATION_NOTE =
   'Give a location as either `latitude`+`longitude` or an `address_id` from GET /v1/addresses — not both. ' +
@@ -190,7 +191,7 @@ export function registerDiscoveryRoutes(app: OpenAPIHono<AppEnv>): void {
       responses: toolResponses('Deals at the store.', TOOLS.getStoreDeals),
     }),
     async (c) => {
-      const { store_id } = c.req.valid('param')
+      const store_id = await resolveStoreId(c, c.req.valid('param').store_id)
       const { limit, ...location } = c.req.valid('query')
       const { latitude, longitude } = await resolveLocation(c, location)
       // Upstream types store_id as an integer here, unlike every other route.
@@ -219,7 +220,7 @@ export function registerDiscoveryRoutes(app: OpenAPIHono<AppEnv>): void {
     }),
     async (c) => {
       const { store_id } = c.req.valid('param')
-      return c.json(await callTool(c, TOOLS.getStoreInfo, { store_id }))
+      return c.json(await callTool(c, TOOLS.getStoreInfo, { store_id: await resolveStoreId(c, store_id) }))
     },
   )
 
@@ -245,7 +246,12 @@ export function registerDiscoveryRoutes(app: OpenAPIHono<AppEnv>): void {
     }),
     async (c) => {
       const { store_id } = c.req.valid('param')
-      return c.json(await callTool(c, TOOLS.getRestaurantMenu, { store_id, ...c.req.valid('query') }))
+      return c.json(
+        await callTool(c, TOOLS.getRestaurantMenu, {
+          store_id: await resolveStoreId(c, store_id),
+          ...c.req.valid('query'),
+        }),
+      )
     },
   )
 
@@ -264,7 +270,7 @@ export function registerDiscoveryRoutes(app: OpenAPIHono<AppEnv>): void {
           name: z
             .union([z.string().min(1), z.array(z.string().min(1))])
             .meta({ description: 'Item name to look for. Repeatable.' }),
-          max_results: z.coerce.number().int().min(1).max(100).optional().meta({
+          limit: z.coerce.number().int().min(1).max(100).optional().meta({
             description: 'Results per item searched. Upstream default is 20.',
           }),
           snap_eligible_only: BooleanQuery.optional().meta({
@@ -281,14 +287,14 @@ export function registerDiscoveryRoutes(app: OpenAPIHono<AppEnv>): void {
     }),
     async (c) => {
       const { store_id } = c.req.valid('param')
-      const { max_results, snap_eligible_only, disable_ads } = c.req.valid('query')
+      const { limit, snap_eligible_only, disable_ads } = c.req.valid('query')
       // Read raw so repeated `name` params all survive.
       const names = c.req.queries('name') ?? []
       return c.json(
         await callTool(c, TOOLS.findItemsInStore, {
-          store_id,
+          store_id: await resolveStoreId(c, store_id),
           item_names: names,
-          max_results,
+          max_results: limit,
           snap_eligible_only,
           disable_ads,
         }),
@@ -309,7 +315,9 @@ export function registerDiscoveryRoutes(app: OpenAPIHono<AppEnv>): void {
     }),
     async (c) => {
       const { store_id, item_id } = c.req.valid('param')
-      return c.json(await callTool(c, TOOLS.getItemDetails, { store_id, item_id }))
+      return c.json(
+        await callTool(c, TOOLS.getItemDetails, { store_id: await resolveStoreId(c, store_id), item_id }),
+      )
     },
   )
 
@@ -329,7 +337,13 @@ export function registerDiscoveryRoutes(app: OpenAPIHono<AppEnv>): void {
     }),
     async (c) => {
       const { store_id, menu_id, item_id } = c.req.valid('param')
-      return c.json(await callTool(c, TOOLS.getFoodItem, { store_id, menu_id, item_id }))
+      return c.json(
+        await callTool(c, TOOLS.getFoodItem, {
+          store_id: await resolveStoreId(c, store_id),
+          menu_id,
+          item_id,
+        }),
+      )
     },
   )
 }

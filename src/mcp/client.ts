@@ -54,7 +54,9 @@ export class McpClient {
       method: 'tools/call',
       params: { name: tool, arguments: args },
     })
-    return unwrapToolResult(envelope, tool)
+    const result = unwrapToolResult(envelope, tool)
+    if (this.#cfg.strictToolErrors) assertSucceeded(result, tool)
+    return result
   }
 
   async #post(accessToken: string, body: unknown): Promise<JsonRpcEnvelope> {
@@ -218,6 +220,53 @@ export function unwrapToolResult(envelope: JsonRpcEnvelope, tool: string): Recor
   }
 
   return { content: result.content ?? [] }
+}
+
+/**
+ * A tool that reported failure inside a successful envelope.
+ *
+ * MCP's own `isError` covers a tool that blew up; this covers the far more
+ * common case of one that ran fine and refused — cart gone, store closed, item
+ * unavailable. DoorDash signals that with `success: false` in the body, which
+ * would otherwise reach the caller as HTTP 200 and have to be noticed. Anything
+ * that has to be noticed eventually isn't.
+ *
+ * Deliberately narrow: only a literal `false` counts, so a tool that omits the
+ * field, or that nests a `success` somewhere deeper, is left alone.
+ */
+function assertSucceeded(result: Record<string, unknown>, tool: string): void {
+  if (result.success !== false) return
+
+  const message = firstString(result, ['error_message', 'message', 'error'])
+  throw new ApiError(
+    502,
+    'doordash_tool_error',
+    message ?? `DoorDash reported that ${tool} did not succeed, without saying why.`,
+    {
+      tool,
+      // The rest of the payload is often the only diagnostic there is, and
+      // dropping it would leave the caller with strictly less than the
+      // pass-through gave them.
+      upstream_result: result,
+      ...pick(result, ['error_type', 'error_category']),
+    },
+  )
+}
+
+function firstString(obj: Record<string, unknown>, keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = obj[key]
+    if (typeof value === 'string' && value.trim() !== '') return value
+  }
+  return undefined
+}
+
+function pick(obj: Record<string, unknown>, keys: string[]): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const key of keys) {
+    if (obj[key] !== undefined && obj[key] !== null) out[key] = obj[key]
+  }
+  return out
 }
 
 function textOf(result: McpToolResult): string | undefined {

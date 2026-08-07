@@ -51,6 +51,9 @@ export interface Config {
   sessionSweepIntervalSeconds: number
   sessionDbPath: string
 
+  /** Where `Idempotency-Key` replays for order submission are recorded. */
+  idempotencyDbPath: string
+
   /** RFC 8628-style pairing for devices with no browser. */
   pairingEnabled: boolean
   pairingDbPath: string
@@ -74,6 +77,30 @@ export interface Config {
   defaultLongitude: number
 
   upstreamTimeoutMs: number
+
+  /**
+   * Refuse anything that changes state or spends money.
+   *
+   * For instances handed to an agent or exposed more widely than the account
+   * holder: browsing keeps working, carts and orders do not.
+   */
+  readOnly: boolean
+
+  /**
+   * Treat a tool result carrying `success: false` as an error rather than
+   * passing it through with HTTP 200.
+   *
+   * On by default because a 200 that means "this failed" is the kind of thing
+   * naive clients never check for. The switch exists because we cannot know
+   * every shape DoorDash returns, and a tool that reports `success: false`
+   * routinely in some benign case would otherwise become unusable.
+   */
+  strictToolErrors: boolean
+
+  /** Seconds between upstream polls behind the order-status SSE stream. */
+  orderStreamIntervalSeconds: number
+  /** Hard cap on how long one SSE stream stays open. */
+  orderStreamMaxSeconds: number
 }
 
 export class ConfigError extends Error {}
@@ -188,8 +215,13 @@ function normalizeBaseUrl(raw: string): string {
  * file next to the session database rather than sharing its connection.
  */
 function defaultPairingDbPath(sessionDbPath: string): string {
+  return siblingDbPath(sessionDbPath, 'pairings')
+}
+
+/** A separate file beside the session database, so one mounted volume covers all of them. */
+function siblingDbPath(sessionDbPath: string, suffix: string): string {
   if (sessionDbPath === ':memory:') return ':memory:'
-  return sessionDbPath.replace(/(\.db)?$/, '') + '-pairings.db'
+  return sessionDbPath.replace(/(\.db)?$/, '') + `-${suffix}.db`
 }
 
 function normalizeOrigin(raw: string): string {
@@ -235,6 +267,24 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
   }
 
   const sessionDbPath = str(env, 'SESSION_DB_PATH', './data/sessions.db')
+
+  const orderStreamIntervalSeconds = int(env, 'ORDER_STREAM_INTERVAL_SECONDS', 15)
+  const orderStreamMaxSeconds = int(env, 'ORDER_STREAM_MAX_SECONDS', 1_800)
+
+  // Each tick is an upstream call against the account's own rate budget, and
+  // the stream holds a connection open for as long as it runs.
+  if (orderStreamIntervalSeconds < 5) {
+    throw new ConfigError(
+      `ORDER_STREAM_INTERVAL_SECONDS is ${orderStreamIntervalSeconds}s. Use at least 5 — every tick is an ` +
+        'upstream request, and DoorDash does not publish an order status any faster than that.',
+    )
+  }
+  if (orderStreamMaxSeconds <= orderStreamIntervalSeconds) {
+    throw new ConfigError(
+      `ORDER_STREAM_MAX_SECONDS (${orderStreamMaxSeconds}) must exceed ORDER_STREAM_INTERVAL_SECONDS ` +
+        `(${orderStreamIntervalSeconds}), or the stream closes before it polls.`,
+    )
+  }
 
   const publicBaseUrlRaw = env.PUBLIC_BASE_URL?.trim()
   const publicBaseUrl = publicBaseUrlRaw ? normalizeBaseUrl(publicBaseUrlRaw) : undefined
@@ -302,6 +352,8 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     sessionSweepIntervalSeconds: int(env, 'SESSION_SWEEP_INTERVAL_SECONDS', 3_600),
     sessionDbPath,
 
+    idempotencyDbPath: str(env, 'IDEMPOTENCY_DB_PATH', siblingDbPath(sessionDbPath, 'idempotency')),
+
     pairingEnabled: bool(env, 'PAIRING_ENABLED', true),
     // Defaults alongside the session database so one mounted volume covers both.
     pairingDbPath: str(env, 'PAIRING_DB_PATH', defaultPairingDbPath(sessionDbPath)),
@@ -316,5 +368,11 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     defaultLongitude: num(env, 'DEFAULT_LONGITUDE', -122.009),
 
     upstreamTimeoutMs: int(env, 'UPSTREAM_TIMEOUT_MS', 30_000),
+
+    readOnly: bool(env, 'READ_ONLY', false),
+    strictToolErrors: bool(env, 'STRICT_TOOL_ERRORS', true),
+
+    orderStreamIntervalSeconds,
+    orderStreamMaxSeconds,
   }
 }

@@ -69,6 +69,7 @@ pin it yourself — the entrypoint handles both.
 | `SESSION_DB_PATH` | `/data/sessions.db` | Mount `/data` to keep sessions across recreates. |
 | `PUID` / `PGID` | `1000` / `1000` | Ownership of `/data`. Unraid uses `99` / `100`. |
 | `PUBLIC_BASE_URL` | *(derived)* | Set it behind a reverse proxy — [device pairing](https://github.com/LarveyOfficial/ddREST/wiki/Device-pairing) prints this address for a human to visit. |
+| `READ_ONLY` | `false` | `true` refuses every state-changing request. Browsing works; carts and orders do not. Worth setting on an instance handed to an agent. |
 
 **Cookies over plain HTTP.** `COOKIE_SECURE` defaults to `true`, so a browser
 reaching this over `http://host:8787` will silently drop the session cookie.

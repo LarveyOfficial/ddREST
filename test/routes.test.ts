@@ -32,6 +32,15 @@ interface Case {
   required: string[]
   /** Specific argument values this route must translate correctly. */
   expect?: Record<string, unknown>
+  /**
+   * Upstream calls this route makes, when it chains more than one.
+   *
+   * Assertions always run against the last call — the one the route exists to
+   * make — so a resolver or lookup in front of it does not have to be restated.
+   */
+  upstreamCalls?: number
+  /** Upstream payloads this route reads before making its own call. */
+  mockResult?: (tool: string, args: Record<string, unknown>) => unknown
 }
 
 /**
@@ -49,6 +58,10 @@ const TOOLS_WITHOUT_INTENT = new Set<string>([
   TOOLS.getStoreDeals,
   TOOLS.setDeliveryInstructions,
   TOOLS.setAddressLabel,
+  TOOLS.micCarousel,
+  TOOLS.addressAutocomplete,
+  TOOLS.selectAddress,
+  TOOLS.getUserInfo,
 ])
 
 const CASES: Case[] = [
@@ -133,10 +146,10 @@ const CASES: Case[] = [
   {
     name: 'list carts',
     method: 'GET',
-    path: '/v1/carts?store_id=327011',
+    path: '/v1/carts?store_id=327011&limit=20',
     tool: TOOLS.listActiveCarts,
     required: ['max_carts', 'intent'],
-    expect: { store_id: '327011', max_carts: 40 },
+    expect: { store_id: '327011', max_carts: 20 },
   },
   {
     name: 'add items (cart chosen by DoorDash)',
@@ -330,7 +343,7 @@ const CASES: Case[] = [
   {
     name: 'promo eligible items',
     method: 'GET',
-    path: '/v1/stores/327011/promotions/camp-1/items?max_results=5&fulfillment_type=PICKUP',
+    path: '/v1/stores/327011/promotions/camp-1/items?limit=5&fulfillment_type=PICKUP',
     tool: TOOLS.getPromoEligibleItems,
     required: ['store_id', 'campaign_id'],
     expect: { store_id: '327011', campaign_id: 'camp-1', max_results: 5, fulfillment_type: 'PICKUP' },
@@ -370,11 +383,54 @@ const CASES: Case[] = [
     required: ['address_link_id', 'label'],
     expect: { address_link_id: '6065321966', label: 'home' },
   },
+  {
+    name: 'who am i',
+    method: 'GET',
+    path: '/v1/me',
+    tool: TOOLS.getUserInfo,
+    required: [],
+  },
+  {
+    name: 'address autocomplete',
+    method: 'GET',
+    path: '/v1/addresses/search?query=21+E+Bellevue&country=us&latitude=41.9&longitude=-87.6',
+    tool: TOOLS.addressAutocomplete,
+    required: ['query'],
+    expect: { query: '21 E Bellevue', country: 'us', latitude: 41.9, longitude: -87.6 },
+  },
+  {
+    name: 'save a new address',
+    method: 'POST',
+    path: '/v1/addresses',
+    body: { place_id: 'place-1', entry_code: '1234', address_type: 'apartment' },
+    tool: TOOLS.selectAddress,
+    required: ['place_id'],
+    expect: { place_id: 'place-1', entry_code: '1234', address_type: 'apartment' },
+  },
+  {
+    name: 'cart savings suggestions',
+    method: 'GET',
+    path: '/v1/carts/cart-7/suggestions?projected_subtotal_cents=2500',
+    tool: TOOLS.micCarousel,
+    // Reads the cart for its items, then the store for the submarket_id the
+    // upstream tool silently needs, before asking for suggestions.
+    upstreamCalls: 3,
+    mockResult: (tool) => {
+      if (tool === TOOLS.getCart) {
+        return { cart: { store_id: '1836920', items: [{ id: 'line-1', item_id: 'i1', quantity: 1 }] } }
+      }
+      if (tool === TOOLS.getStoreInfo) return { store: { store_id: '1836920', submarket_id: 7 } }
+      return {}
+    },
+    required: ['store_id', 'submarket_id', 'item_ids', 'projected_subtotal_cents'],
+    expect: { store_id: 1836920, submarket_id: 7, item_ids: ['i1'], projected_subtotal_cents: 2500 },
+  },
 ]
 
 describe('tool routes', () => {
   for (const tc of CASES) {
     test(`${tc.method} ${tc.path} -> ${tc.tool} (${tc.name})`, async () => {
+      if (tc.mockResult) h.mock.setToolResult(tc.mockResult)
       const res = await h.request(tc.path, {
         method: tc.method,
         headers: auth,
@@ -382,9 +438,9 @@ describe('tool routes', () => {
       })
 
       expect(res.status).toBe(200)
-      expect(h.mock.calls).toHaveLength(1)
+      expect(h.mock.calls).toHaveLength(tc.upstreamCalls ?? 1)
 
-      const call = h.mock.calls[0]!
+      const call = h.mock.calls.at(-1)!
       expect(call.tool).toBe(tc.tool)
 
       for (const key of tc.required) {
@@ -405,7 +461,7 @@ describe('tool routes', () => {
   test('covers every tool', () => {
     const covered = new Set(CASES.map((c) => c.tool))
     const all = new Set<string>(Object.values(TOOLS))
-    expect(all.size).toBe(34)
+    expect(all.size).toBe(38)
     expect([...all].filter((t) => !covered.has(t))).toEqual([])
   })
 })
@@ -519,8 +575,9 @@ describe('openapi document', () => {
     const operations = Object.values(doc.paths).flatMap((methods: Record<string, unknown>) =>
       Object.keys(methods).filter((m) => ['get', 'post', 'put', 'patch', 'delete'].includes(m)),
     )
-    // 34 tools + the extra add-to-cart entry point + 4 auth routes + 5 pairing routes.
-    expect(operations).toHaveLength(44)
+    // 38 tools + the extra add-to-cart entry point + the status stream
+    // + 4 auth routes + 5 pairing routes.
+    expect(operations).toHaveLength(49)
     expect(doc.paths['/v1/auth/login/complete']).toBeDefined()
 
     // Pairing is additive: the original login flow must still be documented.

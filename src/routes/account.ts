@@ -4,6 +4,8 @@ import { createRoute, z, type OpenAPIHono } from '@hono/zod-openapi'
 import type { AppEnv } from '../types.ts'
 import { TOOLS } from '../mcp/tools.ts'
 import { callTool, security, toolResponses } from './shared.ts'
+import { resolveLocation } from './location.ts'
+import { AddressIdQuery, LatitudeQuery, LongitudeQuery } from '../schemas/common.ts'
 
 const tags = ['Account']
 
@@ -26,6 +28,104 @@ const AddressLinkIdParam = z.string().min(1).meta({
 })
 
 export function registerAccountRoutes(app: OpenAPIHono<AppEnv>): void {
+  // doordash_get_user_info
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/v1/me',
+      tags,
+      summary: 'Who this session belongs to',
+      description: 'The DoorDash account the current session authenticates as.',
+      security,
+      responses: toolResponses('Account details.', TOOLS.getUserInfo),
+    }),
+    async (c) => c.json(await callTool(c, TOOLS.getUserInfo, {})),
+  )
+
+  // doordash_address_autocomplete
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/v1/addresses/search',
+      tags,
+      summary: 'Search for an address to add',
+      description:
+        'Autocomplete over real addresses, for adding one the account has not saved before. Each result carries ' +
+        'a `place_id`; POST it to /v1/addresses to save it.\n\n' +
+        'Results are biased toward the location you give, which improves them noticeably for a partial query ' +
+        'like "21 E Bellevue".',
+      security,
+      request: {
+        query: z.object({
+          query: z.string().min(1).meta({ description: 'Partial address text.', example: '21 E Bellevue Pl' }),
+          country: z
+            .string()
+            .length(2)
+            .optional()
+            .meta({ description: 'ISO country code to restrict results, e.g. `us`. Omit to search globally.' }),
+          latitude: LatitudeQuery.optional(),
+          longitude: LongitudeQuery.optional(),
+          address_id: AddressIdQuery.optional(),
+        }),
+      },
+      responses: toolResponses('Address predictions.', TOOLS.addressAutocomplete),
+    }),
+    async (c) => {
+      const { query, country, ...location } = c.req.valid('query')
+      const { latitude, longitude } = await resolveLocation(c, location)
+      return c.json(
+        await callTool(c, TOOLS.addressAutocomplete, { query, country, latitude, longitude }),
+      )
+    },
+  )
+
+  // doordash_select_address
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/v1/addresses',
+      tags,
+      summary: 'Save a new delivery address',
+      description:
+        'Takes a `place_id` from /v1/addresses/search and saves it to the account, which is the only way to add ' +
+        'an address the account has never used.\n\n' +
+        'This also makes it the account’s current delivery address, because upstream does both in one step. ' +
+        'Set `save_to_profile: false` to resolve the address without keeping it — useful for a one-off ' +
+        'delivery.\n\n' +
+        'The detail fields (`subpremise`, `entry_code`, and so on) are worth filling in at creation time: they ' +
+        'are what a Dasher actually reads.',
+      security,
+      request: {
+        body: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: z
+                .object({
+                  place_id: z.string().min(1).meta({ description: 'From GET /v1/addresses/search.' }),
+                  subpremise: z.string().optional().meta({ description: 'Apartment, suite, room or floor.' }),
+                  entry_code: z.string().optional().meta({ description: 'Gate or entry code.' }),
+                  building_name: z.string().optional().meta({ description: 'Building, hotel or business name.' }),
+                  delivery_instructions: z.string().optional(),
+                  address_type: z.enum(['house', 'apartment', 'hotel', 'office', 'other']).optional(),
+                  delivery_preference: z.enum(['leave', 'meet']).optional(),
+                  delivery_location: z
+                    .enum(['door', 'lobby', 'apartment_door', 'room_door', 'office_suite', 'outside'])
+                    .optional(),
+                  save_to_profile: z.boolean().optional().meta({
+                    description: 'Defaults to true upstream. False resolves the address without saving it.',
+                  }),
+                })
+                .openapi('CreateAddressBody'),
+            },
+          },
+        },
+      },
+      responses: toolResponses('The saved address.', TOOLS.selectAddress),
+    }),
+    async (c) => c.json(await callTool(c, TOOLS.selectAddress, c.req.valid('json'))),
+  )
+
   // doordash_list_delivery_addresses
   app.openapi(
     createRoute({
