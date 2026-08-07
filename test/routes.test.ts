@@ -34,6 +34,23 @@ interface Case {
   expect?: Record<string, unknown>
 }
 
+/**
+ * Tools whose input schema declares no `intent`, per `bun run list-tools`.
+ *
+ * Sending one anyway is an undeclared argument — ignored at best, rejected at
+ * worst — so the routes below must leave it off entirely.
+ */
+const TOOLS_WITHOUT_INTENT = new Set<string>([
+  TOOLS.updateCartItem,
+  TOOLS.updateDeliveryOption,
+  TOOLS.getAppliedPromotions,
+  TOOLS.getPromoEligibleItems,
+  TOOLS.getNearbyOffers,
+  TOOLS.getStoreDeals,
+  TOOLS.setDeliveryInstructions,
+  TOOLS.setAddressLabel,
+])
+
 const CASES: Case[] = [
   // ---- Discovery -----------------------------------------------------------
   {
@@ -280,7 +297,7 @@ const CASES: Case[] = [
     path: '/v1/carts/cart-7/items/line-3',
     body: { quantity: 4 },
     tool: TOOLS.updateCartItem,
-    required: ['cart_id', 'item_id', 'quantity', 'intent'],
+    required: ['cart_id', 'item_id', 'quantity'],
     // The path carries the cart-line id; upstream calls the pair cart_id/item_id.
     expect: { cart_id: 'cart-7', item_id: 'line-3', quantity: 4 },
   },
@@ -290,7 +307,7 @@ const CASES: Case[] = [
     path: '/v1/carts/cart-7/items/line-3',
     body: { quantity: 0 },
     tool: TOOLS.updateCartItem,
-    required: ['cart_id', 'item_id', 'quantity', 'intent'],
+    required: ['cart_id', 'item_id', 'quantity'],
     expect: { quantity: 0 },
   },
   {
@@ -299,7 +316,7 @@ const CASES: Case[] = [
     path: '/v1/carts/cart-7/fulfillment',
     body: { is_pickup: true },
     tool: TOOLS.updateDeliveryOption,
-    required: ['cart_uuid', 'is_pickup', 'intent'],
+    required: ['cart_uuid', 'is_pickup'],
     expect: { cart_uuid: 'cart-7', is_pickup: true },
   },
   {
@@ -307,7 +324,7 @@ const CASES: Case[] = [
     method: 'GET',
     path: '/v1/carts/cart-7/promotions',
     tool: TOOLS.getAppliedPromotions,
-    required: ['cart_uuid', 'intent'],
+    required: ['cart_uuid'],
     expect: { cart_uuid: 'cart-7' },
   },
   {
@@ -315,7 +332,7 @@ const CASES: Case[] = [
     method: 'GET',
     path: '/v1/stores/327011/promotions/camp-1/items?max_results=5&fulfillment_type=PICKUP',
     tool: TOOLS.getPromoEligibleItems,
-    required: ['store_id', 'campaign_id', 'intent'],
+    required: ['store_id', 'campaign_id'],
     expect: { store_id: '327011', campaign_id: 'camp-1', max_results: 5, fulfillment_type: 'PICKUP' },
   },
   {
@@ -323,7 +340,7 @@ const CASES: Case[] = [
     method: 'GET',
     path: '/v1/offers?latitude=41.9&longitude=-87.6&limit=10',
     tool: TOOLS.getNearbyOffers,
-    required: ['user_lat', 'user_lon', 'intent'],
+    required: ['user_lat', 'user_lon'],
     expect: { user_lat: 41.9, user_lon: -87.6, limit: 10 },
   },
   {
@@ -331,7 +348,7 @@ const CASES: Case[] = [
     method: 'GET',
     path: '/v1/stores/1836920/deals?limit=20',
     tool: TOOLS.getStoreDeals,
-    required: ['store_id', 'intent'],
+    required: ['store_id'],
     // Upstream types store_id as an integer for this tool alone.
     expect: { store_id: 1836920, limit: 20 },
   },
@@ -341,7 +358,7 @@ const CASES: Case[] = [
     path: '/v1/addresses/6065321966/instructions',
     body: { delivery_instructions: 'Gate code 1234' },
     tool: TOOLS.setDeliveryInstructions,
-    required: ['address_link_id', 'delivery_instructions', 'intent'],
+    required: ['address_link_id', 'delivery_instructions'],
     expect: { address_link_id: '6065321966', delivery_instructions: 'Gate code 1234' },
   },
   {
@@ -350,7 +367,7 @@ const CASES: Case[] = [
     path: '/v1/addresses/6065321966/label',
     body: { label: 'home' },
     tool: TOOLS.setAddressLabel,
-    required: ['address_link_id', 'label', 'intent'],
+    required: ['address_link_id', 'label'],
     expect: { address_link_id: '6065321966', label: 'home' },
   },
 ]
@@ -373,6 +390,11 @@ describe('tool routes', () => {
       for (const key of tc.required) {
         expect(call.args).toHaveProperty(key)
         expect(call.args[key]).not.toBeUndefined()
+      }
+      if (TOOLS_WITHOUT_INTENT.has(tc.tool)) {
+        expect(call.args).not.toHaveProperty('intent')
+      } else {
+        expect(call.args.intent).toContain('Summary:')
       }
       for (const [key, value] of Object.entries(tc.expect ?? {})) {
         expect(call.args[key]).toEqual(value as never)

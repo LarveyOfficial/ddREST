@@ -2,12 +2,17 @@
  * The 34 MCP tool names, and the server-generated `intent` each one is called
  * with.
  *
- * Every tool accepts an `intent` string, and per the CLI's own help text
+ * Most tools accept an `intent` string, and per the CLI's own help text
  * DoorDash "may review this data for research and product-improvement
  * purposes". This API never exposes `intent` to callers and never forwards an
  * end-user prompt, so each intent states the operation and says plainly that no
  * user text is attached. Keeping the strings here — rather than inline at each
  * route — makes it possible to audit in one place exactly what we tell DoorDash.
+ *
+ * Eight tools declare no `intent` in their input schema at all (see SUMMARIES).
+ * They get no intent rather than one the gateway never asked for — sending an
+ * undeclared argument is at best ignored and at worst rejected, and it is
+ * disclosure with no upside either way.
  */
 
 export const TOOLS = {
@@ -54,7 +59,14 @@ export const TOOLS = {
 
 export type ToolName = (typeof TOOLS)[keyof typeof TOOLS]
 
-const SUMMARIES: Record<ToolName, string> = {
+/**
+ * One summary per tool whose input schema declares `intent`.
+ *
+ * Deliberately partial: the eight tools missing below do not advertise the
+ * argument, so nothing is sent for them. Check with `bun run list-tools` before
+ * adding an entry — a tool absent from this map is a decision, not an omission.
+ */
+const SUMMARIES: Partial<Record<ToolName, string>> = {
   [TOOLS.findRestaurants]: 'Find restaurants near a location on the user’s behalf.',
   [TOOLS.getRestaurantMenu]: 'Retrieve a restaurant menu the user asked to see.',
   [TOOLS.getStoreInfo]: 'Retrieve details about a store the user asked about.',
@@ -62,8 +74,7 @@ const SUMMARIES: Record<ToolName, string> = {
   [TOOLS.getFoodItem]: 'Retrieve details about a menu item the user asked about.',
   [TOOLS.findItemsInStore]: 'Locate specific items within a store for the user.',
   [TOOLS.findNearbyStores]: 'Find nearby non-restaurant stores for the user.',
-  [TOOLS.getNearbyOffers]: 'Show the user restaurant offers available near them.',
-  [TOOLS.getStoreDeals]: 'Show the user the deals available at a store they asked about.',
+  // getNearbyOffers, getStoreDeals: no `intent` in their schemas.
 
   [TOOLS.createProductList]: 'Build a grocery product list from items the user supplied.',
 
@@ -72,14 +83,12 @@ const SUMMARIES: Record<ToolName, string> = {
   [TOOLS.getCart]: 'Show the contents of a cart the user asked to see.',
   [TOOLS.removeCartItem]: 'Remove an item the user asked to take out of their cart.',
   [TOOLS.clearCart]: 'Delete a cart at the user’s request.',
-  [TOOLS.updateCartItem]: 'Change the quantity of an item in the user’s cart at their request.',
-  [TOOLS.updateDeliveryOption]: 'Switch a cart between delivery and pickup as the user chose.',
+  // updateCartItem, updateDeliveryOption: no `intent` in their schemas.
 
   [TOOLS.listPromotions]: 'List promotions the user is eligible for at a store.',
   [TOOLS.applyPromotion]: 'Apply a promotion the user chose to their cart.',
   [TOOLS.removePromotion]: 'Remove a promotion the user asked to take off their cart.',
-  [TOOLS.getAppliedPromotions]: 'Show the user which promotions are applied to their cart.',
-  [TOOLS.getPromoEligibleItems]: 'List the items that qualify for a promotion the user is considering.',
+  // getAppliedPromotions, getPromoEligibleItems: no `intent` in their schemas.
 
   [TOOLS.getOrderHistory]: 'Show the user their own past orders.',
   [TOOLS.reorder]: 'Recreate a past order the user asked to reorder.',
@@ -92,17 +101,19 @@ const SUMMARIES: Record<ToolName, string> = {
   [TOOLS.listDeliveryAddresses]: 'List the user’s saved delivery addresses.',
   [TOOLS.setDeliveryAddress]: 'Set the delivery address the user selected.',
   [TOOLS.getPaymentInfo]: 'Show the user their saved payment methods.',
-  [TOOLS.setDeliveryInstructions]: 'Save delivery instructions the user wrote for a Dasher.',
-  [TOOLS.setAddressLabel]: 'Label one of the user’s saved addresses as they asked.',
+  // setDeliveryInstructions, setAddressLabel: no `intent` in their schemas.
 }
 
 /**
  * Uses the shape dd-cli sends ("Summary: ...\nuser prompt/purpose: ...") so
  * the field reads the way DoorDash expects, while being honest that this API
  * carries no end-user prompt to forward.
+ *
+ * Undefined for the tools that do not declare `intent`; callTool drops it.
  */
-export function intentFor(tool: ToolName): string {
+export function intentFor(tool: ToolName): string | undefined {
   const summary = SUMMARIES[tool]
+  if (summary === undefined) return undefined
   return (
     `Summary: ${summary}\n` +
     'Audience: the authenticated DoorDash account holder, acting through a self-hosted REST API.\n' +

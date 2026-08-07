@@ -113,7 +113,7 @@ export function createApp(cfg: Config): OpenAPIHono<AppEnv> {
       description:
         'A REST implementation of the DoorDash Consumer MCP server. The gateway speaks JSON-RPC 2.0 over ' +
         'Server-Sent Events; this API puts conventional REST resources in front of it, so clients never see ' +
-        'JSON-RPC, SSE, or the `intent` argument every tool requires.\n\n' +
+        'JSON-RPC, SSE, or the `intent` argument most tools accept.\n\n' +
         'Inspired by [dd-cli](https://github.com/doordash-oss/doordash-cli), DoorDash\u2019s own terminal client ' +
         'for the same gateway. Independent implementation.\n\n' +
         '**Login is a paste-back flow.** DoorDash only permits loopback OAuth callbacks, so this server cannot ' +

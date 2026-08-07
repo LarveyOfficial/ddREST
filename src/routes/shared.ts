@@ -74,13 +74,16 @@ export const toolResponses = (description: string, tool?: ToolName) => ({
 /**
  * Issue a tool call for the current request. `intent` is injected here and
  * nowhere else, which is what keeps it off the public API surface.
+ *
+ * Compacting last matters: `intentFor` returns undefined for the tools whose
+ * schemas do not declare `intent`, and that has to be dropped rather than sent.
  */
 export function callTool(
   c: Context<AppEnv>,
   tool: ToolName,
   args: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
-  return c.get('mcp').callTool(c.get('accessToken'), tool, { ...compact(args), intent: intentFor(tool) })
+  return c.get('mcp').callTool(c.get('accessToken'), tool, compact({ ...args, intent: intentFor(tool) }))
 }
 
 /** Drop undefined values so optional arguments are omitted rather than sent as null. */
