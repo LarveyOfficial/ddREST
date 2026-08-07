@@ -8,6 +8,10 @@ import { CartUuidParam, OrderUuidParam } from '../schemas/common.ts'
 
 const tags = ['Orders']
 
+const ADDRESS_NOTE =
+  'An `address_id` from GET /v1/addresses. Selects that saved address for this order instead of the account’s ' +
+  'current one, without changing the account default. Sent upstream as `delivery_address_id`.'
+
 export function registerOrderRoutes(app: OpenAPIHono<AppEnv>): void {
   // internal_get_order_history
   app.openapi(
@@ -99,6 +103,7 @@ export function registerOrderRoutes(app: OpenAPIHono<AppEnv>): void {
             'application/json': {
               schema: z
                 .object({
+                  address_id: z.string().min(1).optional().meta({ description: ADDRESS_NOTE }),
                   scheduled_delivery_time: z.iso.datetime().optional(),
                   fulfillment: z.enum(['delivery', 'pickup']).optional(),
                   delivery_option: z
@@ -118,7 +123,12 @@ export function registerOrderRoutes(app: OpenAPIHono<AppEnv>): void {
     }),
     async (c) => {
       const { cart_uuid } = c.req.valid('param')
-      return c.json(await callTool(c, TOOLS.previewOrder, { ...(c.req.valid('json') ?? {}), cart_uuid }))
+      // Exposed as address_id for consistency with the rest of the API; upstream
+      // spells it delivery_address_id.
+      const { address_id, ...body } = c.req.valid('json') ?? {}
+      return c.json(
+        await callTool(c, TOOLS.previewOrder, { ...body, cart_uuid, delivery_address_id: address_id }),
+      )
     },
   )
 
@@ -142,6 +152,7 @@ export function registerOrderRoutes(app: OpenAPIHono<AppEnv>): void {
               schema: z
                 .object({
                   tip_amount_cents: z.int().min(0),
+                  address_id: z.string().min(1).optional().meta({ description: ADDRESS_NOTE }),
                   scheduled_delivery_time: z.iso.datetime().optional(),
                   fulfillment: z.enum(['delivery', 'pickup']).optional(),
                   delivery_option: z.enum(['express']).optional(),
@@ -164,7 +175,10 @@ export function registerOrderRoutes(app: OpenAPIHono<AppEnv>): void {
     }),
     async (c) => {
       const { cart_uuid } = c.req.valid('param')
-      return c.json(await callTool(c, TOOLS.submitOrder, { ...c.req.valid('json'), cart_uuid }))
+      const { address_id, ...body } = c.req.valid('json')
+      return c.json(
+        await callTool(c, TOOLS.submitOrder, { ...body, cart_uuid, delivery_address_id: address_id }),
+      )
     },
   )
 

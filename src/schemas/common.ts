@@ -53,6 +53,17 @@ export const OrderUuidParam = z.string().min(1).meta({ description: 'Order UUID.
 export const LatitudeQuery = z.coerce.number().min(-90).max(90)
 export const LongitudeQuery = z.coerce.number().min(-180).max(180)
 
+/**
+ * A boolean in a query string.
+ *
+ * `z.coerce.boolean()` is wrong here: it applies JS truthiness, so the string
+ * "false" becomes `true`. Accept the spellings people actually type instead,
+ * and reject the rest rather than guessing.
+ */
+export const BooleanQuery = z
+  .enum(['true', 'false', '1', '0', 'yes', 'no'])
+  .transform((v) => v === 'true' || v === '1' || v === 'yes')
+
 /** Alternative to latitude/longitude on any endpoint that takes a location. */
 export const AddressIdQuery = z.string().min(1).meta({
   description:

@@ -514,6 +514,28 @@ ids are opaque numbers, so each comes with its printable address:
 A saved address carrying no coordinates returns `address_missing_coordinates`
 rather than quietly falling back to the configured default.
 
+### Optional parameters
+
+Every optional argument the gateway advertises is exposed, bar the guest-session
+ones (`session_id`, `session_nonce`, `is_guest`) which switch identity away from
+your authenticated account or ask for an AES-encrypted response. `/docs` has the
+full list; the ones worth knowing about:
+
+| Route | Parameter | Why it matters |
+| --- | --- | --- |
+| `/v1/restaurants` | `radius` | Miles. **Upstream defaults to 3**, which is tight outside a dense city — widen it if results look sparse. |
+| `/v1/restaurants` | `desired_restaurant_name`, `item_name` | Narrow to a named restaurant or a specific dish. |
+| `/v1/stores/{id}/menu` | `include_extras` | Every item's options inline. Much larger response. |
+| `/v1/stores/{id}/items` | `disable_ads` | Suppress sponsored placements. Worth setting if you take only the first result, since a sponsored placement is not ranked. |
+| `/v1/stores/{id}/items` | `max_results`, `snap_eligible_only` | Results per item; SNAP/EBT filter. |
+| `/v1/carts/{uuid}`, add-to-cart | `include_pricing` | Subtotal, taxes and fees inline. An estimate — the preview endpoint is what an order is priced against. |
+| `/v1/carts/{uuid}/preview` and `/order` | `address_id` | Deliver this order to a saved address without changing the account default. Sent upstream as `delivery_address_id`. |
+| `/v1/nearby-stores` | `use_store_ranker` | Experimental upstream ranking instead of soonest-ETA. |
+
+Boolean query parameters accept `true`/`false`, `1`/`0`, `yes`/`no`, and reject
+anything else rather than guessing — `?disable_ads=maybe` is a 400, not a
+silent `true`.
+
 The auth and pairing routes are not tool-backed:
 
 | Method | Path | Purpose |

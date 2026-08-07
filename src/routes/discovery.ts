@@ -4,7 +4,7 @@ import { createRoute, z, type OpenAPIHono } from '@hono/zod-openapi'
 import type { AppEnv } from '../types.ts'
 import { TOOLS } from '../mcp/tools.ts'
 import { callTool, security, toolResponses } from './shared.ts'
-import { AddressIdQuery, LatitudeQuery, LongitudeQuery, StoreIdParam } from '../schemas/common.ts'
+import { AddressIdQuery, BooleanQuery, LatitudeQuery, LongitudeQuery, StoreIdParam } from '../schemas/common.ts'
 import { resolveLocation } from './location.ts'
 
 const LOCATION_NOTE =
@@ -31,20 +31,47 @@ export function registerDiscoveryRoutes(app: OpenAPIHono<AppEnv>): void {
           longitude: LongitudeQuery.optional(),
           address_id: AddressIdQuery.optional(),
           limit: z.coerce.number().int().min(1).max(50).default(5),
+          radius: z.coerce
+            .number()
+            .min(0.1)
+            .max(50)
+            .optional()
+            .meta({
+              description:
+                'Search radius in miles. Upstream default is 3, which is tight outside a dense city — widen it ' +
+                'for suburban or rural areas, or when looking for the best option rather than the nearest.',
+              example: 5,
+            }),
+          desired_restaurant_name: z.string().min(1).optional().meta({
+            description:
+              'Narrow to a specific named restaurant, e.g. "Chipotle". Leave unset for generic queries like ' +
+              '"pizza" — upstream treats this as an exact-ish match, not a hint.',
+          }),
+          item_name: z.string().min(1).optional().meta({
+            description:
+              'Surface a specific menu item by name, e.g. "pad thai". For dish-level searches only; leave unset ' +
+              'for mood queries like "something spicy".',
+          }),
+          delivery_address_label: z.string().min(1).optional().meta({
+            description:
+              'Display label for the location, e.g. "Near Fair Lawn, NJ". Affects presentation only, and only ' +
+              'in DoorDash’s own widget — it has no effect on which restaurants are returned.',
+          }),
         }),
       },
       responses: toolResponses('Matching restaurants.', TOOLS.findRestaurants),
     }),
     async (c) => {
       const cfg = c.get('config')
-      const { query, limit, ...location } = c.req.valid('query')
-      const { latitude, longitude } = await resolveLocation(c, location)
+      const { query, limit, latitude, longitude, address_id, ...rest } = c.req.valid('query')
+      const resolved = await resolveLocation(c, { latitude, longitude, address_id })
       return c.json(
         await callTool(c, TOOLS.findRestaurants, {
           query,
-          latitude: latitude ?? cfg.defaultLatitude,
-          longitude: longitude ?? cfg.defaultLongitude,
+          latitude: resolved.latitude ?? cfg.defaultLatitude,
+          longitude: resolved.longitude ?? cfg.defaultLongitude,
           max_stores: limit,
+          ...rest,
         }),
       )
     },
@@ -72,21 +99,27 @@ export function registerDiscoveryRoutes(app: OpenAPIHono<AppEnv>): void {
           latitude: LatitudeQuery.optional(),
           longitude: LongitudeQuery.optional(),
           address_id: AddressIdQuery.optional(),
+          use_store_ranker: BooleanQuery.optional().meta({
+            description:
+              'Experimental upstream flag: rank by DoorDash’s store ranker instead of soonest-ETA first. Falls ' +
+              'back to ETA order if the ranker is unavailable.',
+          }),
         }),
       },
       responses: toolResponses('Nearby stores.', TOOLS.findNearbyStores),
     }),
     async (c) => {
-      const { vertical_scope, limit, ...location } = c.req.valid('query')
-      const { latitude, longitude } = await resolveLocation(c, location)
+      const { vertical_scope, limit, latitude, longitude, address_id, use_store_ranker } = c.req.valid('query')
+      const resolved = await resolveLocation(c, { latitude, longitude, address_id })
       // Upstream expects these paired, so send both or neither.
-      const hasCoords = latitude !== undefined && longitude !== undefined
+      const hasCoords = resolved.latitude !== undefined && resolved.longitude !== undefined
       return c.json(
         await callTool(c, TOOLS.findNearbyStores, {
           vertical_scope,
           max_stores: limit,
-          user_lat: hasCoords ? latitude : undefined,
-          user_lon: hasCoords ? longitude : undefined,
+          user_lat: hasCoords ? resolved.latitude : undefined,
+          user_lon: hasCoords ? resolved.longitude : undefined,
+          use_store_ranker,
         }),
       )
     },
@@ -117,12 +150,24 @@ export function registerDiscoveryRoutes(app: OpenAPIHono<AppEnv>): void {
       tags,
       summary: 'Get a restaurant menu',
       security,
-      request: { params: z.object({ store_id: StoreIdParam }) },
+      request: {
+        params: z.object({ store_id: StoreIdParam }),
+        query: z.object({
+          include_extras: BooleanQuery.optional().meta({
+            description:
+              'Return every item’s extras and popular modifications inline. Makes the response substantially ' +
+              'larger; prefer the single-item endpoint when you only need one item’s options.',
+          }),
+          store_name: z.string().min(1).optional().meta({
+            description: 'Restaurant display name, passed through for presentation. Does not affect the menu returned.',
+          }),
+        }),
+      },
       responses: toolResponses('Menu id and items.', TOOLS.getRestaurantMenu),
     }),
     async (c) => {
       const { store_id } = c.req.valid('param')
-      return c.json(await callTool(c, TOOLS.getRestaurantMenu, { store_id }))
+      return c.json(await callTool(c, TOOLS.getRestaurantMenu, { store_id, ...c.req.valid('query') }))
     },
   )
 
@@ -141,15 +186,35 @@ export function registerDiscoveryRoutes(app: OpenAPIHono<AppEnv>): void {
           name: z
             .union([z.string().min(1), z.array(z.string().min(1))])
             .meta({ description: 'Item name to look for. Repeatable.' }),
+          max_results: z.coerce.number().int().min(1).max(100).optional().meta({
+            description: 'Results per item searched. Upstream default is 20.',
+          }),
+          snap_eligible_only: BooleanQuery.optional().meta({
+            description: 'Return only SNAP/EBT-eligible items.',
+          }),
+          disable_ads: BooleanQuery.optional().meta({
+            description:
+              'Suppress sponsored placements. Worth setting when you take only the first result per query, since ' +
+              'a sponsored placement is not ranked and would otherwise silently become that result.',
+          }),
         }),
       },
       responses: toolResponses('Matching items in the store.', TOOLS.findItemsInStore),
     }),
     async (c) => {
       const { store_id } = c.req.valid('param')
+      const { max_results, snap_eligible_only, disable_ads } = c.req.valid('query')
       // Read raw so repeated `name` params all survive.
       const names = c.req.queries('name') ?? []
-      return c.json(await callTool(c, TOOLS.findItemsInStore, { store_id, item_names: names }))
+      return c.json(
+        await callTool(c, TOOLS.findItemsInStore, {
+          store_id,
+          item_names: names,
+          max_results,
+          snap_eligible_only,
+          disable_ads,
+        }),
+      )
     },
   )
 

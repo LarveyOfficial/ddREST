@@ -4,9 +4,19 @@ import { createRoute, z, type OpenAPIHono } from '@hono/zod-openapi'
 import type { AppEnv } from '../types.ts'
 import { TOOLS } from '../mcp/tools.ts'
 import { callTool, security, toolResponses } from './shared.ts'
-import { CartItemInputSchema, CartUuidParam, GroupCartConfigSchema, StoreIdParam } from '../schemas/common.ts'
+import {
+  BooleanQuery,
+  CartItemInputSchema,
+  CartUuidParam,
+  GroupCartConfigSchema,
+  StoreIdParam,
+} from '../schemas/common.ts'
 
 const tags = ['Cart']
+
+const PRICING_NOTE =
+  'Include a pricing breakdown (subtotal, taxes_and_fees, discounts, total) in the response. This is an estimate ' +
+  'for display — use the preview endpoint for the quote an order is actually placed against.'
 
 /** Body for both add-to-cart routes; the path variant supplies cart_uuid itself. */
 const AddItemsBody = z
@@ -14,6 +24,7 @@ const AddItemsBody = z
     store_id: StoreIdParam,
     menu_id: z.string().min(1).meta({ description: 'Must belong to store_id.' }),
     items: z.array(CartItemInputSchema).min(1),
+    include_pricing: z.boolean().optional().meta({ description: PRICING_NOTE }),
     is_pickup: z.boolean().optional().meta({ description: 'New carts default to delivery.' }),
     spend_limit_cents: z
       .int()
@@ -98,12 +109,16 @@ export function registerCartRoutes(app: OpenAPIHono<AppEnv>): void {
       tags,
       summary: 'Show a cart',
       security,
-      request: { params: z.object({ cart_uuid: CartUuidParam }) },
+      request: {
+        params: z.object({ cart_uuid: CartUuidParam }),
+        query: z.object({ include_pricing: BooleanQuery.optional().meta({ description: PRICING_NOTE }) }),
+      },
       responses: toolResponses('Cart contents.', TOOLS.getCart),
     }),
     async (c) => {
       const { cart_uuid } = c.req.valid('param')
-      return c.json(await callTool(c, TOOLS.getCart, { cart_uuid }))
+      const { include_pricing } = c.req.valid('query')
+      return c.json(await callTool(c, TOOLS.getCart, { cart_uuid, include_pricing }))
     },
   )
 
