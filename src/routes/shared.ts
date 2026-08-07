@@ -54,6 +54,7 @@ export const commonErrorResponses = {
   400: errorResponse('Invalid request.'),
   401: errorResponse('Missing, invalid or expired session — start a new login.'),
   403: errorResponse('Origin rejected, or the DoorDash account is not enrolled in the consumer MCP beta.'),
+  429: errorResponse('DoorDash is rate-limiting requests. Carries a `Retry-After` header and `retry_after_seconds`.'),
   502: errorResponse('The DoorDash MCP gateway failed or returned an error.'),
   504: errorResponse('The DoorDash MCP gateway timed out.'),
 } as const

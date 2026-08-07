@@ -17,7 +17,7 @@ import { streamSSE } from 'hono/streaming'
 import { ApiError } from '../errors.ts'
 import type { AppEnv } from '../types.ts'
 import { TOOLS } from '../mcp/tools.ts'
-import { callTool, security, trackingUrl } from './shared.ts'
+import { callTool, commonErrorResponses, ErrorSchema, security, trackingUrl } from './shared.ts'
 import { resolveOrderUuid } from './resolve.ts'
 import { OrderUuidParam } from '../schemas/common.ts'
 
@@ -72,8 +72,15 @@ export function registerOrderStreamRoute(app: OpenAPIHono<AppEnv>): void {
             },
           },
         },
-        400: { description: 'Invalid request, or `latest` matched no order.' },
-        401: { description: 'Missing, invalid or expired session.' },
+        // The order id — including `latest` — is resolved before the stream
+        // opens, and that resolution calls upstream, so every error a tool route
+        // can raise is reachable here as a normal HTTP response. Once the stream
+        // is open a failed poll becomes an `error` frame inside the 200 instead.
+        ...commonErrorResponses,
+        400: {
+          description: 'Invalid request, or `latest` matched no order.',
+          content: { 'application/json': { schema: ErrorSchema } },
+        },
       },
     }),
     async (c) => {
