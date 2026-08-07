@@ -202,8 +202,16 @@ export function unwrapToolResult(envelope: JsonRpcEnvelope, tool: string): Recor
     throw new ApiError(502, 'doordash_tool_error', textOf(result) ?? `Tool ${tool} reported an error.`, { tool })
   }
 
-  if (result.structuredContent && typeof result.structuredContent === 'object') {
-    return result.structuredContent
+  const structured = result.structuredContent
+  const structuredIsObject = structured !== null && typeof structured === 'object'
+
+  // A populated structuredContent is the real payload and is preferred. An
+  // *empty* one is not: some tools mirror nothing into it and carry everything
+  // in the text block, so `structuredContent: {}` next to a full text block is
+  // a response we would otherwise hand back as `{}` — a 200 that looks broken.
+  // Only short-circuit here when there is actually something in it.
+  if (structuredIsObject && Object.keys(structured).length > 0) {
+    return structured
   }
 
   const text = textOf(result)
@@ -219,6 +227,9 @@ export function unwrapToolResult(envelope: JsonRpcEnvelope, tool: string): Recor
     }
   }
 
+  // Nothing in the text either. An empty structuredContent, if that is what we
+  // had, is a truer answer than an invented `content` wrapper.
+  if (structuredIsObject) return structured
   return { content: result.content ?? [] }
 }
 

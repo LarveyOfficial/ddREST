@@ -124,11 +124,12 @@ const CASES: Case[] = [
     expect: { store_id: 327011, item_id: 'item-9' },
   },
   {
-    name: 'menu item details',
+    name: 'menu item details with an explicit menu_id',
     method: 'GET',
-    path: '/v1/stores/327011/menus/menu-1/items/item-9',
+    path: '/v1/stores/327011/menu/items/item-9?menu_id=menu-1',
     tool: TOOLS.getFoodItem,
     required: ['store_id', 'menu_id', 'item_id', 'intent'],
+    // A supplied menu_id is used as-is, no lookup.
     expect: { store_id: '327011', menu_id: 'menu-1', item_id: 'item-9' },
   },
 

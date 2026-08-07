@@ -6,7 +6,7 @@ import { TOOLS } from '../mcp/tools.ts'
 import { callTool, security, toolResponses } from './shared.ts'
 import { AddressIdQuery, BooleanQuery, LatitudeQuery, LongitudeQuery, StoreIdParam } from '../schemas/common.ts'
 import { resolveLocation } from './location.ts'
-import { resolveStoreId, storeIdAsInt } from './resolve.ts'
+import { resolveMenuId, resolveStoreId, storeIdAsInt } from './resolve.ts'
 
 const LOCATION_NOTE =
   'Give a location as either `latitude`+`longitude` or an `address_id` from GET /v1/addresses — not both. ' +
@@ -307,6 +307,10 @@ export function registerDiscoveryRoutes(app: OpenAPIHono<AppEnv>): void {
       path: '/v1/stores/{store_id}/items/{item_id}',
       tags,
       summary: 'Get details for a store item',
+      description:
+        'The companion to /v1/stores/{store_id}/items, whose results carry the `item_id` this takes.\n\n' +
+        'For a restaurant menu item, use /v1/stores/{store_id}/menus/{menu_id}/items/{item_id} instead — this ' +
+        'route resolves against a different id space and returns an empty body for one it does not recognise.',
       security,
       request: { params: z.object({ store_id: StoreIdParam, item_id: z.string().min(1) }) },
       responses: toolResponses('Item details.', TOOLS.getItemDetails),
@@ -326,22 +330,33 @@ export function registerDiscoveryRoutes(app: OpenAPIHono<AppEnv>): void {
   app.openapi(
     createRoute({
       method: 'get',
-      path: '/v1/stores/{store_id}/menus/{menu_id}/items/{item_id}',
+      path: '/v1/stores/{store_id}/menu/items/{item_id}',
       tags,
-      summary: 'Get details for a menu item',
-      description: 'The restaurant-menu variant, which needs the menu id alongside the store and item.',
+      summary: 'Get details for a restaurant menu item',
+      description:
+        'For **restaurants** — full detail on one menu item, including its modifiers and extras.\n\n' +
+        'The upstream tool needs a `menu_id`, but you can leave it off: omit it and the store’s menu id is ' +
+        'filled in for you, at the cost of one extra lookup, and the id used comes back in `X-Resolved-Menu-Id`. ' +
+        'Pass it — from GET /v1/stores/{store_id}/menu — to skip that lookup.',
       security,
       request: {
-        params: z.object({ store_id: StoreIdParam, menu_id: z.string().min(1), item_id: z.string().min(1) }),
+        params: z.object({ store_id: StoreIdParam, item_id: z.string().min(1) }),
+        query: z.object({
+          menu_id: z.string().min(1).optional().meta({
+            description: 'The store’s menu id. Omit to have it resolved from the store.',
+          }),
+        }),
       },
       responses: toolResponses('Menu item details.', TOOLS.getFoodItem),
     }),
     async (c) => {
-      const { store_id, menu_id, item_id } = c.req.valid('param')
+      const { store_id, item_id } = c.req.valid('param')
+      const { menu_id } = c.req.valid('query')
+      const resolvedStore = await resolveStoreId(c, store_id)
       return c.json(
         await callTool(c, TOOLS.getFoodItem, {
-          store_id: await resolveStoreId(c, store_id),
-          menu_id,
+          store_id: resolvedStore,
+          menu_id: await resolveMenuId(c, resolvedStore, menu_id),
           item_id,
         }),
       )

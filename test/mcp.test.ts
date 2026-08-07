@@ -59,6 +59,20 @@ describe('unwrapToolResult', () => {
     expect(unwrapToolResult({ result: { content: [{ type: 'text', text: '{"a":1}' }] } }, 't')).toEqual({ a: 1 })
   })
 
+  test('falls through an empty structuredContent to the text block', () => {
+    // The shape that returned a bare {} — an empty structuredContent shadowing
+    // a populated text block, which some tools use as their only payload.
+    const out = unwrapToolResult(
+      { result: { structuredContent: {}, content: [{ type: 'text', text: '{"item":{"name":"Burrito"}}' }] } },
+      'internal_get_item_details',
+    )
+    expect(out).toEqual({ item: { name: 'Burrito' } })
+  })
+
+  test('returns an empty object only when there is genuinely nothing else', () => {
+    expect(unwrapToolResult({ result: { structuredContent: {} } }, 't')).toEqual({})
+  })
+
   test('wraps non-object text', () => {
     expect(unwrapToolResult({ result: { content: [{ type: 'text', text: 'plain words' }] } }, 't')).toEqual({
       text: 'plain words',

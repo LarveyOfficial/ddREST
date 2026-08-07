@@ -134,6 +134,24 @@ describe('menu_id resolution', () => {
     expect(res.headers.get('X-Resolved-Menu-Id')).toBe('menu-42')
   })
 
+  test('an omitted menu_id on the food-item route resolves from the store', async () => {
+    h.mock.setToolResult(fixtures())
+    const res = await h.request('/v1/stores/327011/menu/items/item-9', { headers: auth })
+
+    expect(res.status).toBe(200)
+    expect(lastCall().tool).toBe(TOOLS.getFoodItem)
+    expect(lastCall().args.menu_id).toBe('menu-42')
+    expect(res.headers.get('X-Resolved-Menu-Id')).toBe('menu-42')
+  })
+
+  test('a supplied menu_id on the food-item route costs no extra call', async () => {
+    h.mock.setToolResult(fixtures())
+    await h.request('/v1/stores/327011/menu/items/item-9?menu_id=menu-mine', { headers: auth })
+
+    expect(h.mock.calls).toHaveLength(1)
+    expect(lastCall().args.menu_id).toBe('menu-mine')
+  })
+
   test('a supplied menu_id costs no extra call', async () => {
     h.mock.setToolResult(fixtures())
     await h.request('/v1/carts/items', {
