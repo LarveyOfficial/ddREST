@@ -24,6 +24,22 @@ import { TOOLS } from '../mcp/tools.ts'
 import { callTool } from './shared.ts'
 import { resolveLocation } from './location.ts'
 
+/**
+ * `store_id` as the integer a handful of tools demand.
+ *
+ * Every route takes and returns store ids as strings, matching most of the
+ * gateway. But `internal_get_item_details`, `internal_find_items_in_store`,
+ * `internal_get_store_deals` and `internal_get_mic_carousel` type it as an
+ * integer and reject a string outright ("'327011' is not of type 'integer'").
+ * A non-numeric id — DoorDash does occasionally hand out ones with letters — is
+ * left as a string so the gateway can give its own error rather than us sending
+ * NaN.
+ */
+export function storeIdAsInt(storeId: string): number | string {
+  const n = Number(storeId)
+  return Number.isInteger(n) ? n : storeId
+}
+
 /** Most recently touched, whichever resource it is. */
 export const LATEST_KEYWORD = 'latest'
 const STORE_PREFIX = 'store:'

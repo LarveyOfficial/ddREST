@@ -19,7 +19,7 @@ import { ApiError } from '../errors.ts'
 import type { AppEnv } from '../types.ts'
 import { TOOLS } from '../mcp/tools.ts'
 import { callTool, security, toolResponses } from './shared.ts'
-import { resolveCartUuid } from './resolve.ts'
+import { resolveCartUuid, storeIdAsInt } from './resolve.ts'
 import { CartUuidParam } from '../schemas/common.ts'
 
 export function registerSuggestionRoutes(app: OpenAPIHono<AppEnv>): void {
@@ -94,11 +94,10 @@ export function registerSuggestionRoutes(app: OpenAPIHono<AppEnv>): void {
         )
       }
 
-      // store_id is typed as an integer here, as it is for store deals.
-      const numericStoreId = Number(storeId)
       return c.json(
         await callTool(c, TOOLS.micCarousel, {
-          store_id: Number.isInteger(numericStoreId) ? numericStoreId : storeId,
+          // store_id is typed as an integer here, as it is for store deals.
+          store_id: storeIdAsInt(storeId),
           submarket_id: submarketId,
           item_ids: itemIds,
           projected_subtotal_cents: subtotal,

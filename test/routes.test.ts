@@ -111,7 +111,8 @@ const CASES: Case[] = [
     path: '/v1/stores/327011/items?name=milk&name=eggs',
     tool: TOOLS.findItemsInStore,
     required: ['store_id', 'item_names', 'intent'],
-    expect: { store_id: '327011', item_names: ['milk', 'eggs'] },
+    // This tool types store_id as an integer, unlike get_store_info/menu.
+    expect: { store_id: 327011, item_names: ['milk', 'eggs'] },
   },
   {
     name: 'store item details',
@@ -119,7 +120,8 @@ const CASES: Case[] = [
     path: '/v1/stores/327011/items/item-9',
     tool: TOOLS.getItemDetails,
     required: ['store_id', 'item_id', 'intent'],
-    expect: { store_id: '327011', item_id: 'item-9' },
+    // Integer store_id here too.
+    expect: { store_id: 327011, item_id: 'item-9' },
   },
   {
     name: 'menu item details',

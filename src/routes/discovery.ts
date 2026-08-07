@@ -6,7 +6,7 @@ import { TOOLS } from '../mcp/tools.ts'
 import { callTool, security, toolResponses } from './shared.ts'
 import { AddressIdQuery, BooleanQuery, LatitudeQuery, LongitudeQuery, StoreIdParam } from '../schemas/common.ts'
 import { resolveLocation } from './location.ts'
-import { resolveStoreId } from './resolve.ts'
+import { resolveStoreId, storeIdAsInt } from './resolve.ts'
 
 const LOCATION_NOTE =
   'Give a location as either `latitude`+`longitude` or an `address_id` from GET /v1/addresses — not both. ' +
@@ -194,11 +194,9 @@ export function registerDiscoveryRoutes(app: OpenAPIHono<AppEnv>): void {
       const store_id = await resolveStoreId(c, c.req.valid('param').store_id)
       const { limit, ...location } = c.req.valid('query')
       const { latitude, longitude } = await resolveLocation(c, location)
-      // Upstream types store_id as an integer here, unlike every other route.
-      const numericStoreId = Number(store_id)
       return c.json(
         await callTool(c, TOOLS.getStoreDeals, {
-          store_id: Number.isInteger(numericStoreId) ? numericStoreId : store_id,
+          store_id: storeIdAsInt(store_id),
           user_lat: latitude,
           user_lon: longitude,
           limit,
@@ -292,7 +290,7 @@ export function registerDiscoveryRoutes(app: OpenAPIHono<AppEnv>): void {
       const names = c.req.queries('name') ?? []
       return c.json(
         await callTool(c, TOOLS.findItemsInStore, {
-          store_id: await resolveStoreId(c, store_id),
+          store_id: storeIdAsInt(await resolveStoreId(c, store_id)),
           item_names: names,
           max_results: limit,
           snap_eligible_only,
@@ -316,7 +314,10 @@ export function registerDiscoveryRoutes(app: OpenAPIHono<AppEnv>): void {
     async (c) => {
       const { store_id, item_id } = c.req.valid('param')
       return c.json(
-        await callTool(c, TOOLS.getItemDetails, { store_id: await resolveStoreId(c, store_id), item_id }),
+        await callTool(c, TOOLS.getItemDetails, {
+          store_id: storeIdAsInt(await resolveStoreId(c, store_id)),
+          item_id,
+        }),
       )
     },
   )
