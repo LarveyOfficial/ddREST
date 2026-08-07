@@ -38,8 +38,10 @@ export function registerDiscoveryRoutes(app: OpenAPIHono<AppEnv>): void {
             .optional()
             .meta({
               description:
-                'Search radius in miles. Upstream default is 3, which is tight outside a dense city — widen it ' +
-                'for suburban or rural areas, or when looking for the best option rather than the nearest.',
+                'Search radius in miles. The upstream schema documents a default of 3, but a search with this ' +
+                'unset reported back a radius of 8, so the default is not fixed. Set it explicitly when the ' +
+                'reach matters — wider for suburban or rural areas, or when looking for the best option rather ' +
+                'than the nearest.',
               example: 5,
             }),
           desired_restaurant_name: z.string().min(1).optional().meta({
@@ -51,11 +53,6 @@ export function registerDiscoveryRoutes(app: OpenAPIHono<AppEnv>): void {
             description:
               'Surface a specific menu item by name, e.g. "pad thai". For dish-level searches only; leave unset ' +
               'for mood queries like "something spicy".',
-          }),
-          delivery_address_label: z.string().min(1).optional().meta({
-            description:
-              'Display label for the location, e.g. "Near Fair Lawn, NJ". Affects presentation only, and only ' +
-              'in DoorDash’s own widget — it has no effect on which restaurants are returned.',
           }),
         }),
       },
@@ -157,9 +154,6 @@ export function registerDiscoveryRoutes(app: OpenAPIHono<AppEnv>): void {
             description:
               'Return every item’s extras and popular modifications inline. Makes the response substantially ' +
               'larger; prefer the single-item endpoint when you only need one item’s options.',
-          }),
-          store_name: z.string().min(1).optional().meta({
-            description: 'Restaurant display name, passed through for presentation. Does not affect the menu returned.',
           }),
         }),
       },
