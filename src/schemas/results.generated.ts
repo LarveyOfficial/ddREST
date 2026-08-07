@@ -1597,7 +1597,175 @@ export const TOOL_RESULT_SCHEMAS: Record<string, { component: string; schema: Re
                             "type": "number"
                           },
                           "extras": {
-                            "type": "array"
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "extra_id": {
+                                  "type": "string"
+                                },
+                                "title": {
+                                  "type": "string"
+                                },
+                                "min_num_options": {
+                                  "type": "integer"
+                                },
+                                "max_num_options": {
+                                  "type": "integer"
+                                },
+                                "num_free_options": {
+                                  "type": "integer"
+                                },
+                                "options": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "option_id": {
+                                        "type": "string"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "price": {
+                                        "type": "number"
+                                      },
+                                      "extras": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "object",
+                                          "properties": {
+                                            "extra_id": {
+                                              "type": "string"
+                                            },
+                                            "title": {
+                                              "type": "string"
+                                            },
+                                            "min_num_options": {
+                                              "type": "integer"
+                                            },
+                                            "max_num_options": {
+                                              "type": "integer"
+                                            },
+                                            "num_free_options": {
+                                              "type": "integer"
+                                            },
+                                            "options": {
+                                              "type": "array",
+                                              "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                  "option_id": {
+                                                    "type": "string"
+                                                  },
+                                                  "name": {
+                                                    "type": "string"
+                                                  },
+                                                  "price": {
+                                                    "type": "number"
+                                                  },
+                                                  "extras": {
+                                                    "type": "array",
+                                                    "items": {
+                                                      "type": "object",
+                                                      "properties": {
+                                                        "extra_id": {
+                                                          "type": "string"
+                                                        },
+                                                        "title": {
+                                                          "type": "string"
+                                                        },
+                                                        "min_num_options": {
+                                                          "type": "integer"
+                                                        },
+                                                        "max_num_options": {
+                                                          "type": "integer"
+                                                        },
+                                                        "num_free_options": {
+                                                          "type": "integer"
+                                                        },
+                                                        "options": {
+                                                          "type": "array",
+                                                          "items": {
+                                                            "type": "object",
+                                                            "properties": {
+                                                              "option_id": {
+                                                                "type": "string"
+                                                              },
+                                                              "name": {
+                                                                "type": "string"
+                                                              },
+                                                              "price": {
+                                                                "type": "integer"
+                                                              },
+                                                              "extras": {
+                                                                "type": "array"
+                                                              }
+                                                            },
+                                                            "required": [
+                                                              "option_id",
+                                                              "name",
+                                                              "price",
+                                                              "extras"
+                                                            ],
+                                                            "additionalProperties": true
+                                                          }
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "extra_id",
+                                                        "title",
+                                                        "min_num_options",
+                                                        "max_num_options",
+                                                        "num_free_options",
+                                                        "options"
+                                                      ],
+                                                      "additionalProperties": true
+                                                    }
+                                                  }
+                                                },
+                                                "required": [
+                                                  "option_id",
+                                                  "name",
+                                                  "price",
+                                                  "extras"
+                                                ],
+                                                "additionalProperties": true
+                                              }
+                                            }
+                                          },
+                                          "required": [
+                                            "extra_id",
+                                            "title",
+                                            "min_num_options",
+                                            "max_num_options",
+                                            "num_free_options",
+                                            "options"
+                                          ],
+                                          "additionalProperties": true
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "option_id",
+                                      "name",
+                                      "price",
+                                      "extras"
+                                    ],
+                                    "additionalProperties": true
+                                  }
+                                }
+                              },
+                              "required": [
+                                "extra_id",
+                                "title",
+                                "min_num_options",
+                                "max_num_options",
+                                "num_free_options",
+                                "options"
+                              ],
+                              "additionalProperties": true
+                            }
                           }
                         },
                         "required": [
@@ -1667,7 +1835,111 @@ export const TOOL_RESULT_SCHEMAS: Record<string, { component: string; schema: Re
                                   "type": "integer"
                                 },
                                 "extras": {
-                                  "type": "array"
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "extra_id": {
+                                        "type": "string"
+                                      },
+                                      "title": {
+                                        "type": "string"
+                                      },
+                                      "num_free_options": {
+                                        "type": "integer"
+                                      },
+                                      "options": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "object",
+                                          "properties": {
+                                            "option_id": {
+                                              "type": "string"
+                                            },
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "price": {
+                                              "type": "number"
+                                            },
+                                            "quantity": {
+                                              "type": "integer"
+                                            },
+                                            "extras": {
+                                              "type": "array",
+                                              "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                  "extra_id": {
+                                                    "type": "string"
+                                                  },
+                                                  "title": {
+                                                    "type": "string"
+                                                  },
+                                                  "num_free_options": {
+                                                    "type": "integer"
+                                                  },
+                                                  "options": {
+                                                    "type": "array",
+                                                    "items": {
+                                                      "type": "object",
+                                                      "properties": {
+                                                        "option_id": {
+                                                          "type": "string"
+                                                        },
+                                                        "name": {
+                                                          "type": "string"
+                                                        },
+                                                        "price": {
+                                                          "type": "number"
+                                                        },
+                                                        "quantity": {
+                                                          "type": "integer"
+                                                        },
+                                                        "extras": {
+                                                          "type": "array"
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "option_id",
+                                                        "name",
+                                                        "price",
+                                                        "quantity",
+                                                        "extras"
+                                                      ],
+                                                      "additionalProperties": true
+                                                    }
+                                                  }
+                                                },
+                                                "required": [
+                                                  "extra_id",
+                                                  "title",
+                                                  "num_free_options",
+                                                  "options"
+                                                ],
+                                                "additionalProperties": true
+                                              }
+                                            }
+                                          },
+                                          "required": [
+                                            "option_id",
+                                            "name",
+                                            "price",
+                                            "quantity",
+                                            "extras"
+                                          ],
+                                          "additionalProperties": true
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "extra_id",
+                                      "title",
+                                      "num_free_options",
+                                      "options"
+                                    ],
+                                    "additionalProperties": true
+                                  }
                                 }
                               },
                               "required": [

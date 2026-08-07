@@ -192,8 +192,12 @@ function merge(a: Schema, b: Schema): Schema {
  * A plain re-run would otherwise delete whatever the last run managed to
  * capture, so a read-only run after a --with-cart run would silently undo it.
  *
- * A tool captured in *this* run replaces its previous entry outright rather
- * than merging, so a field DoorDash has removed does not linger forever.
+ * Every sample is merged, including into what an earlier run recorded. Merging
+ * rather than replacing matters because a later sample is often *thinner*: an
+ * empty `carts` array says nothing about a cart's shape, and letting it replace
+ * a shape captured when a cart existed silently deletes real detail. Merge only
+ * ever adds — an array with no items keeps the items the other side knows
+ * about. Use --fresh when the goal really is to start over.
  */
 let observed: Record<string, Schema> = {}
 if (!fresh) {
@@ -210,9 +214,8 @@ const capturedNow = new Set<string>()
 const record = (tool: ToolName, body: Record<string, unknown> | undefined) => {
   if (!body) return
   const shape = infer(body)
-  // Merge only with samples from this run — several calls to the same tool with
-  // different arguments each show a bit more of the shape.
-  observed[tool] = capturedNow.has(tool) ? merge(observed[tool]!, shape) : shape
+  const previous = observed[tool]
+  observed[tool] = previous ? merge(previous, shape) : shape
   capturedNow.add(tool)
   console.log(`   ${tool}: captured ${Object.keys(body).length} top-level fields`)
 }
