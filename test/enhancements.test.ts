@@ -184,6 +184,82 @@ describe('menu_id resolution', () => {
     expect(h.mock.calls.some((call) => call.tool === TOOLS.updateCartItem)).toBe(false)
   })
 
+  test('patching nested_options removes the line and re-adds it', async () => {
+    h.mock.setToolResult((tool) => {
+      if (tool === TOOLS.getCart) {
+        return {
+          cart: {
+            store_id: '327011',
+            items: [{ id: 'line-3', item_id: 'menu-9', menu_id: 'menu-1', name: 'Burrito', quantity: 2 }],
+          },
+        }
+      }
+      return { ok: true }
+    })
+    const res = await h.request('/v1/carts/cart-7/items/line-3', {
+      method: 'PATCH',
+      headers: auth,
+      body: JSON.stringify({ nested_options: [{ id: 'opt-1', name: 'Extra guac', quantity: 1 }] }),
+    })
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get('X-Cart-Item-Replaced')).toBe('true')
+
+    const tools = h.mock.calls.map((call) => call.tool)
+    expect(tools).toContain(TOOLS.removeCartItem)
+    expect(tools).toContain(TOOLS.addToCart)
+    // Removed before re-adding.
+    expect(tools.indexOf(TOOLS.removeCartItem)).toBeLessThan(tools.indexOf(TOOLS.addToCart))
+
+    const add = h.mock.calls.find((call) => call.tool === TOOLS.addToCart)!
+    expect(add.args).toMatchObject({ store_id: '327011', menu_id: 'menu-1' })
+    expect(add.args.items).toEqual([
+      { item_id: 'menu-9', item_name: 'Burrito', quantity: 2, nested_options: [{ id: 'opt-1', name: 'Extra guac', quantity: 1 }] },
+    ])
+  })
+
+  test('an explicit quantity overrides the line’s own when replacing options', async () => {
+    h.mock.setToolResult((tool) => {
+      if (tool === TOOLS.getCart) {
+        return { cart: { store_id: '1', items: [{ id: 'line-3', item_id: 'm', menu_id: 'me', name: 'X', quantity: 2 }] } }
+      }
+      return { ok: true }
+    })
+    await h.request('/v1/carts/cart-7/items/line-3', {
+      method: 'PATCH',
+      headers: auth,
+      body: JSON.stringify({ quantity: 5, nested_options: [{ id: 'o', name: 'n', quantity: 1 }] }),
+    })
+
+    const add = h.mock.calls.find((call) => call.tool === TOOLS.addToCart)!
+    expect((add.args.items as { quantity: number }[])[0]!.quantity).toBe(5)
+  })
+
+  test('a failed re-add reports the item was removed and how to restore it', async () => {
+    let addCalls = 0
+    h.mock.setToolResult((tool) => {
+      if (tool === TOOLS.getCart) {
+        return { cart: { store_id: '1', items: [{ id: 'line-3', item_id: 'm', menu_id: 'me', name: 'X', quantity: 1 }] } }
+      }
+      if (tool === TOOLS.addToCart) {
+        addCalls++
+        return { success: false, message: 'Item unavailable.' }
+      }
+      return { ok: true }
+    })
+    const res = await h.request('/v1/carts/cart-7/items/line-3', {
+      method: 'PATCH',
+      headers: auth,
+      body: JSON.stringify({ nested_options: [{ id: 'o', name: 'n', quantity: 1 }] }),
+    })
+
+    expect(addCalls).toBe(1)
+    expect(res.status).toBe(502)
+    const body = (await res.json()) as { removed: boolean; re_add_body: { items: unknown[] } }
+    expect(body.removed).toBe(true)
+    expect(body.re_add_body.items).toHaveLength(1)
+  })
+
   test('a supplied menu_id costs no extra call', async () => {
     h.mock.setToolResult(fixtures())
     await h.request('/v1/carts/items', {
